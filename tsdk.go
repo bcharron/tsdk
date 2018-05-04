@@ -9,6 +9,7 @@ import (
     "io/ioutil"
     "github.com/beeker1121/goque"
     "github.com/golang/glog"
+    "github.com/Shopify/sarama"
     "time"
     "net"
     "net/http"
@@ -44,37 +45,50 @@ func (m *Metric) isValid() (bool, string) {
 
 func sender(name string, qmgr chan QMessage, myqueue chan Batch) {
     // buf := make([]Metric, 0, 10)
+    config := sarama.NewConfig()
+    config.Producer.Return.Successes = true
+    brokers := []string{"localhost:9092"}
+
+    producer, err := sarama.NewSyncProducer(brokers, config)
+    if err != nil {
+        glog.Fatalf("Unable to instantiate kafka producer: %v", err)
+        return
+    }
+
+    defer producer.Close()
 
     for {
-        // timeout := false
-        // timeout := time.After(time.Second * 5)
-        // timed_out := false
-
-        /*
-        for len(buf) < cap(buf) && !timed_out {
-            select {
-                case metric := <-q:
-                    glog.Info("sender: Received metric ", metric.Metric, "=", metric.Value)
-                    buf = append(buf, metric)
-                case <- timeout:
-                    fmt.Println("Timeout")
-                    timed_out = true
-                    break
-            }
-        }
-        */
-
         glog.V(3).Infof("[%s] Asking the manager for a batch.\n", name)
-        msg := QMessage{"TAKE", name, myqueue}
-        qmgr <- msg
+        qmgr <- QMessage{"TAKE", name, myqueue}
         batch := <-myqueue
 
         glog.V(3).Infof("[%s]: Sending %v metrics.\n", name, len(batch.metrics))
-        <-time.After(time.Second * 4)
 
-        glog.V(3).Infof("[%s]: Committing %v metrics.\n", name, len(batch.metrics))
-        msg = QMessage{"COMMIT", name, myqueue}
-        qmgr <- msg
+        key := sarama.StringEncoder(batch.metrics[0].Metric)
+        json_output, err := json.Marshal(batch.metrics)
+        if err != nil {
+            glog.Errorf("[%s]: Unable to convert to JSON: %v", name, err)
+            // Discard batch, it won't be better next time.
+            qmgr <- QMessage{"COMMIT", name, myqueue}
+        } else {
+            value := sarama.StringEncoder(json_output)
+
+            kafkaMessage := sarama.ProducerMessage{
+                Topic: "tsdb_test",
+                Key: key,
+                Value: value,
+                Headers: []sarama.RecordHeader{},
+                Metadata: nil }
+
+            _, _, err = producer.SendMessage(&kafkaMessage)
+            if err != nil {
+                glog.Errorf("Producer failed: %v", err)
+                qmgr <- QMessage{"ROLLBACK", name, myqueue}
+            } else {
+                glog.V(3).Infof("[%s]: Committing %v metrics.\n", name, len(batch.metrics))
+                qmgr <- QMessage{"COMMIT", name, myqueue}
+            }
+        }
     }
 }
 
@@ -187,7 +201,7 @@ func (q *QueueManager) queueManager(size int, recvq chan Metric, qmgr chan QMess
 
         for len(requests_queue) > 0 && len(q.memq) > 0 {
             req := requests_queue[0]
-            glog.V(3).Infof("mgr: Sending a batch to %s", req.name)
+            glog.V(3).Infof("qmgr: Sending a batch to %s", req.name)
             b = q.take(1000)
             req.sender_channel <- b
             q.trx[req.name] = b
@@ -465,7 +479,7 @@ func main() {
     qmgr := new(QueueManager)
     qmgr.Init(5000, "qdir")
 
-    nb_senders := 5
+    nb_senders := 1
 
     flag.Parse()
 
