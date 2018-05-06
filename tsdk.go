@@ -2,7 +2,9 @@ package main
 
 import (
     "io"
+    "bytes"
     "bufio"
+    "encoding/gob"
     "encoding/json"
     "flag"
     "fmt"
@@ -88,14 +90,29 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch) {
                 glog.V(3).Infof("[%s]: Committing %v metrics.\n", name, len(batch.metrics))
                 qmgr <- QMessage{"COMMIT", name, myqueue}
             }
+
+            // For testing
+            // <-time.After(time.Second)
         }
     }
 }
 
-func showStats(recvq chan Metric, qmgr *QueueManager) {
+func showStats(recvq chan []Metric, qmgr *QueueManager) {
+    var last_received int
+    var last_sent int
+
     for {
         <-time.After(time.Second)
-        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: ?/?\n", len(recvq), cap(recvq), qmgr.count(), qmgr.max)
+        received := qmgr.received
+        sent := qmgr.sent
+
+        diff_received := received - last_received
+        diff_sent := sent - last_sent
+
+        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  idle senders: %v\n", len(recvq), cap(recvq), qmgr.count(), qmgr.max, qmgr.disk_count(), diff_received, diff_sent, len(qmgr.requests_queue))
+
+        last_received = received
+        last_sent = sent
     }
 }
 
@@ -111,14 +128,37 @@ type QMessage struct {
 
 type QueueManager struct {
     memq []Metric
+
+    // metrics queued on disk
     diskq *goque.Queue
+
+    // buffer of metrics that will be sent to disk soon
+    diskbuf []Metric
+
     trx map[string]Batch
     max int
+
+    // Number of metrics received
+    received int
+
+    // Number of metrics sent
+    sent int
+
+    // Number of dropped/discarded metrics
+    drops int
+
+    batch_size int
+
+    // Senders waiting for batches
+    requests_queue []QMessage
 }
 
 func (q *QueueManager) Init(size int, dir string) {
     var err error
 
+    q.batch_size = 1000
+    q.requests_queue = make ([]QMessage, 0, 100)
+    q.diskbuf = make([]Metric, 0, q.batch_size)
     q.max = size
     q.memq = make([]Metric, 0, size)
     q.trx = make(map[string]Batch)
@@ -153,61 +193,151 @@ func (q *QueueManager) count() int {
     return(x)
 }
 
-func (q *QueueManager) add(metric Metric, force bool) {
-    if q.count() < q.max || force {
-        q.memq = append(q.memq, metric)
-    } else {
-        // queue to disk
-        glog.Warning("Queue is full. Dropping message.")
+func (q *QueueManager) add_mem(metric Metric) {
+    q.memq = append(q.memq, metric)
+}
+
+func (q *QueueManager) add(metrics []Metric, force bool) {
+    for _, metric := range metrics {
+        if q.count() < q.max || force {
+            q.add_mem(metric)
+            q.received++
+        } else {
+            // queue to disk
+            if !q.queue_to_disk(metric, force) {
+                if q.drops % 1000 == 0 {
+                    glog.Warningf("Queue is full. Dropped %v messages.", q.drops)
+                }
+
+                q.drops++
+            }
+        }
     }
+}
+
+func (q *QueueManager) disk_count() int {
+    return(int(q.diskq.Length()) * q.batch_size)
+}
+
+func (q *QueueManager) queue_to_disk(metric Metric, force bool) bool {
+    q.diskbuf = append(q.diskbuf, metric)
+
+    if len(q.diskbuf) >= q.batch_size {
+        return(q.flush_disk(force))
+    }
+
+    return(true)
+}
+
+func (q *QueueManager) flush_disk(force bool) bool {
+    if _, err := q.diskq.EnqueueObject(q.diskbuf); err != nil {
+        glog.Error("Failed to queue %v metrics to disk: %v\n", len(q.diskbuf), err)
+        return(false)
+    }
+
+    q.diskbuf = make([]Metric, 0, q.batch_size)
+
+    return(true)
+}
+
+func (q *QueueManager) dequeue_from_disk() bool {
+    item, err := q.diskq.Dequeue()
+    if err != nil {
+        glog.Errorf("Fucked up trying to get data from disk: %v")
+        return false
+    }
+
+    // fmt.Printf("item: %+v\n", item)
+    buf := bytes.NewBuffer(item.Value)
+    dec := gob.NewDecoder(buf)
+
+    var metrics []Metric
+    err = dec.Decode(&metrics)
+    if err != nil {
+        glog.Fatalf("Error decoding metric from disk: %v", err)
+        return false
+    }
+
+    glog.V(4).Infof("Decoded %v metrics from disk", len(metrics))
+
+    for _, metric := range metrics {
+        q.add_mem(metric)
+    }
+
+    return true
 }
 
 // Takes incoming metrics from recvq, queue them in memory or disk, and offer
 // them to sendq.
-func (q *QueueManager) queueManager(size int, recvq chan Metric, qmgr chan QMessage) {
-    // memq := list.New()
-    var m Metric
+func (q *QueueManager) queueManager(size int, recvq chan []Metric, qmgr chan QMessage) {
+    var metrics []Metric
     var b Batch
-    requests_queue := make ([]QMessage, 0, 100)
 
     for {
+        // Receive new metrics and/or requests
         select {
-            case m = <-recvq:
-                glog.V(3).Info("qmgr: Received a metric from the recvq")
+            case metrics = <-recvq:
+                glog.V(4).Infof("qmgr: Received %v metrics from the recvq", len(metrics))
+                q.add(metrics, false)
+
+            /*
+            case metrics = <-diskq:
+                glog.V(4).Infof("qmgr: Received %v metrics from the recvq", len(metrics))
                 q.add(m, false)
+            */
+
             case req := <-qmgr:
                 if req.msg == "TAKE" {
                    if len(q.memq) > 0 {
-                       glog.V(3).Infof("mgr: TAKE request from %s", req.name)
-                       b = q.take(1000)
+                       glog.V(3).Infof("qmgr: TAKE request from %s", req.name)
+                       b = q.take(q.batch_size)
                        req.sender_channel <- b
                        q.trx[req.name] = b
                     } else {
-                        requests_queue = append(requests_queue, req)
+                        q.requests_queue = append(q.requests_queue, req)
                     }
                 } else if req.msg == "COMMIT" {
-                    glog.V(3).Infof("mgr: COMMIT request from %s", req.name)
+                    glog.V(3).Infof("qmgr: COMMIT request from %s", req.name)
+                    q.sent += len(q.trx[req.name].metrics)
                     delete(q.trx, req.name)
                 } else if req.msg == "ROLLBACK" {
-                    glog.V(3).Infof("mgr: ROLLBACK request from %s", req.name)
+                    glog.V(3).Infof("qmgr: ROLLBACK request from %s", req.name)
                     b := q.trx[req.name]
-                    for _, m := range b.metrics {
-                        q.add(m, true)
-                    }
+                    q.add(b.metrics, true)
                     // q.memq = append(q.memq, b.metrics...)
                     delete(q.trx, req.name)
+                } else {
+                    glog.Warningf("qmgr: Unknown message from %s: %v", req.name, req.msg)
                 }
+
+                case <-time.After(200 * time.Millisecond):
+                    // do nothing
         }
 
-        for len(requests_queue) > 0 && len(q.memq) > 0 {
-            req := requests_queue[0]
+        // Send batches if there are any waiting senders
+        for len(q.requests_queue) > 0 && len(q.memq) > 0 {
+            req := q.requests_queue[0]
             glog.V(3).Infof("qmgr: Sending a batch to %s", req.name)
-            b = q.take(1000)
+            b = q.take(q.batch_size)
             req.sender_channel <- b
             q.trx[req.name] = b
-            requests_queue = requests_queue[1:]
+            q.requests_queue = q.requests_queue[1:]
+        }
+
+        // Dequeue from disk if there is room in the memq
+        for len(q.memq) + q.batch_size < q.max && q.diskq.Length() > 0 {
+            if ! q.dequeue_from_disk() {
+                // something wrong happened. leave it for now.
+                break
+            }
         }
     }
+}
+
+type DiskQueueManager struct {
+}
+
+func (q *DiskQueueManager) diskQueueManager() {
 }
 
 type FakeConn struct {
@@ -246,7 +376,7 @@ func (l *FakeListener) Close() error { return nil }
 func (l *FakeListener) Addr() net.Addr { return l.myaddr }
 
 type Receiver struct {
-    recvq chan Metric
+    recvq chan []Metric
 }
 
 func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
@@ -257,7 +387,6 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         "Content-Type",
         "text/html",
     )
-
 
     // XXX: Check method
     // XXX: Check for ?details
@@ -312,13 +441,17 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
 
     glog.V(3).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
 
-    for x := 0; x < len(metrics); x++ {
-        m := metrics[x]
+    valid_metrics := make([]Metric, 0, len(metrics))
+    for _, m := range metrics {
         if ok, errmsg := m.isValid(); ok {
-            r.recvq <- m
+            valid_metrics = append(valid_metrics, m)
         } else {
             glog.Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
         }
+    }
+
+    if len(valid_metrics) > 0 {
+        r.recvq <- valid_metrics
     }
 
     // XXX: Respond with number failed and stuff
@@ -407,12 +540,14 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     }
 
     if ok, err := m.isValid(); ok {
-        r.recvq <- m
+        metrics := make([]Metric, 1, 1)
+        metrics[0] = m
+        // r.recvq <- m
+        r.recvq <- metrics
         c.Write([]byte("ok\n"))
     } else {
         c.Write([]byte(err))
     }
-
 }
 
 func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
@@ -450,7 +585,7 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
 }
 
 func (r *Receiver) server() {
-    ln, err := net.Listen("tcp", ":9999")
+    ln, err := net.Listen("tcp", ":4242")
     if err != nil {
         fmt.Println(err)
         return
@@ -477,13 +612,13 @@ func (r *Receiver) server() {
 
 func main() {
     qmgr := new(QueueManager)
-    qmgr.Init(5000, "qdir")
+    qmgr.Init(5000000, "qdir")
 
-    nb_senders := 1
+    nb_senders := 5
 
     flag.Parse()
 
-    recvq := make(chan Metric, 100000)
+    recvq := make(chan []Metric, 100000)
     // sendq := make(chan Metric, 10000)
 
     glog.Info("Starting")
