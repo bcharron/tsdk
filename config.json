@@ -1,0 +1,8 @@
+{
+    "ListenPort": 4242,
+    "Brokers": ["localhost:9092"],
+    "MemoryQueueSize": 75000,
+    "ReceiveBuffer": 10000,
+    "Senders": 5,
+    "BatchSize": 1000
+}
