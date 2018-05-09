@@ -4,5 +4,6 @@
     "MemoryQueueSize": 75000,
     "ReceiveBuffer": 10000,
     "Senders": 5,
-    "BatchSize": 1000
+    "SendBatchSize": 1000,
+    "DiskBatchSize": 1000
 }
