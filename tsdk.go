@@ -30,6 +30,17 @@ type Configuration struct {
     DiskBatchSize int
 }
 
+func sendStats(prioq chan Metric, qmgr *QueueManager) {
+    hostname, _ := os.Hostname()
+
+    for {
+        tags := map[string]string{"host": hostname}
+        metric := Metric{Metric:"tsdk.memq.count", Value:float64(qmgr.CountMem()), Timestamp: uint64(time.Now().Unix()), Tags: tags}
+        prioq <- metric
+        <-time.After(time.Second)
+    }
+}
+
 func showStats(recvq chan []Metric, qmgr *QueueManager) {
     var last_received int
     var last_sent int
@@ -85,6 +96,7 @@ func main() {
     nb_senders := 5
 
     recvq := make(chan []Metric, configuration.ReceiveBuffer)
+    prioq := make(chan Metric, 1000)
 
     var r Receiver
     r.recvq = recvq
@@ -92,6 +104,7 @@ func main() {
     shutdown_server := make(chan bool, 1)
     go r.server(shutdown_server)
     go showStats(recvq, qmgr)
+    go sendStats(prioq, qmgr)
 
     qmgr_chan := make(chan QMessage)
 
@@ -106,7 +119,7 @@ func main() {
     }
 
     shutdown_qmgr := make(chan bool)
-    go qmgr.queueManager(1000, recvq, qmgr_chan, shutdown_qmgr)
+    go qmgr.queueManager(1000, recvq, prioq, qmgr_chan, shutdown_qmgr)
 
     c := make(chan os.Signal, 2)
     signal.Notify(c, os.Interrupt, syscall.SIGTERM)

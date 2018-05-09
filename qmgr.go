@@ -6,7 +6,11 @@ import(
 )
 
 type QueueManager struct {
+    // Main queue for metrics, in memory
     memq []Metric
+
+    // Priority queue for tsdk's own metrics
+    prioq []Metric
 
     trx map[string]Batch
 
@@ -42,6 +46,7 @@ func (q *QueueManager) Init(size int, dir string) {
     q.requests_queue = make ([]QMessage, 0, 100)
     q.max = size
     q.memq = make([]Metric, 0, size)
+    q.prioq = make([]Metric, 0, 1000)
     q.trx = make(map[string]Batch)
     q.dqm = new(DiskQueueManager)
     q.to_disk = make(chan []Metric, 100)
@@ -55,15 +60,35 @@ func (q *QueueManager) Init(size int, dir string) {
 func (q *QueueManager) take(n int) Batch {
     var b Batch
 
-    if len(q.memq) < n {
+    qsize := len(q.prioq) + len(q.memq) 
+    if n > qsize {
+        n = qsize
+    }
+
+    b.metrics = make([]Metric, n)
+
+    // Take metrics from the priority queue, if any
+    if len(q.prioq) > 0 {
+        pn := n
+        if pn > len(q.prioq) {
+            pn = len(q.prioq)
+        }
+
+        copy(b.metrics, q.prioq)
+        q.prioq = q.prioq[pn:]
+        n -= pn
+    }
+
+    if n > len(q.memq) {
         n = len(q.memq)
     }
 
-    // glog.Infof("Queue size before: %v", len(q.memq))
-    b.metrics = make([]Metric, n)
-    copy(b.metrics, q.memq)
-    q.memq = q.memq[n:]
-    // glog.Infof("Queue size after : %v", len(q.memq))
+    if n > 0 {
+        // glog.Infof("Queue size before: %v", len(q.memq))
+        copy(b.metrics, q.memq)
+        q.memq = q.memq[n:]
+        // glog.Infof("Queue size after : %v", len(q.memq))
+    }
 
     return b
 }
@@ -73,7 +98,7 @@ func (q *QueueManager) Count() int {
 }
 
 func (q *QueueManager) CountMem() int {
-    x := len(q.memq)
+    x := len(q.memq) + len(q.prioq)
 
     for _, batch := range q.trx {
         x += len(batch.metrics)
@@ -93,6 +118,10 @@ func (q *QueueManager) Drops() int {
 
 func (q *QueueManager) add_mem(metric Metric) {
     q.memq = append(q.memq, metric)
+}
+
+func (q *QueueManager) add_prio(metric Metric) {
+    q.prioq = append(q.prioq, metric)
 }
 
 func (q *QueueManager) add(metrics []Metric, force bool) {
@@ -148,7 +177,7 @@ func (q *QueueManager) dispatch() {
 
 // Takes incoming metrics from recvq, queue them in memory or disk, and offer
 // them to sendq.
-func (q *QueueManager) queueManager(size int, recvq chan []Metric, qmgr chan QMessage, done chan bool) {
+func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Metric, qmgr chan QMessage, done chan bool) {
     var metrics []Metric
     var b Batch
     var from_diskq chan []Metric
@@ -171,9 +200,14 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, qmgr chan QMe
                 q.add(metrics, false)
                 q.received += len(metrics)
 
-                if len(q.requests_queue) > 0 && len(q.memq) >= q.batch_size {
+                if len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) >= q.batch_size {
                     q.dispatch()
                 }
+
+            case metric := <-prioc:
+                glog.V(4).Infof("qmgr: Received metric from the prioq")
+                q.add_prio(metric)
+                q.received++
 
             case metrics = <-from_diskq:
                 glog.V(4).Infof("qmgr: Received %v metrics from the diskq", len(metrics))
@@ -205,7 +239,7 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, qmgr chan QMe
 
             case <-timer:
                 glog.V(4).Infof("qmgr: Timer hit. Flushing memq (metrics: %v)", len(q.memq))
-                for len(q.requests_queue) > 0 && len(q.memq) > 0 {
+                for len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) > 0 {
                     q.dispatch()
                 }
                 timer = time.After(time.Second * 5)
@@ -225,6 +259,7 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, qmgr chan QMe
 func (q *QueueManager) shutdown() {
     glog.Infof("qmgr: Shutting down.")
     q.send_to_disk(q.memq, true)
+    q.send_to_disk(q.prioq, true)
 
     if len(q.trx) > 0 {
         glog.Infof("qmgr: Sending incomplete transactions to disk.")
