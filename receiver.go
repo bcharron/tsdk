@@ -2,11 +2,13 @@ package main;
 
 import(
     "bufio"
+    "compress/zlib"
     "encoding/json"
     "fmt"
     "io"
     "io/ioutil"
     "github.com/golang/glog"
+    "compress/gzip"
     "net"
     "net/http"
     "strconv"
@@ -23,13 +25,39 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
 
     w.Header().Set(
         "Content-Type",
-        "text/html",
+        "application/json",
     )
 
     // XXX: Check method
     // XXX: Check for ?details
+    var reader io.ReadCloser
 
-    body, err := ioutil.ReadAll(req.Body)
+    switch req.Header.Get("Content-Encoding") {
+        case "gzip":
+            reader, err = gzip.NewReader(req.Body)
+            if err != nil {
+                glog.Warningf("Error reading gzipd body: %v", err)
+                w.WriteHeader(http.StatusBadRequest)
+                return
+            }
+
+            defer reader.Close()
+
+        case "deflate":
+            reader, err = zlib.NewReader(req.Body)
+            if err != nil {
+                glog.Warningf("Error reading deflated body: %v", err)
+                w.WriteHeader(http.StatusBadRequest)
+                return
+            }
+
+            defer reader.Close()
+
+        default:
+            reader = req.Body
+    }
+
+    body, err := ioutil.ReadAll(reader)
     if err != nil {
         glog.Info("httphandler: ERROR Reading Request Body:", err)
         w.WriteHeader(http.StatusBadRequest)
