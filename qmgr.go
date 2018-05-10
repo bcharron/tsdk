@@ -36,26 +36,17 @@ type QueueManager struct {
 
     from_disk chan []Metric
     to_disk chan []Metric
-
-    // Used to signal the diskq to shutdown
-    diskq_done chan bool
 }
 
-func (q *QueueManager) Init(size int, dir string) {
+func (q *QueueManager) Init(size int, to_disk chan []Metric, from_disk chan []Metric) {
     q.batch_size = configuration.SendBatchSize
     q.requests_queue = make ([]QMessage, 0, 100)
     q.max = size
     q.memq = make([]Metric, 0, size)
     q.prioq = make([]Metric, 0, 1000)
     q.trx = make(map[string]Batch)
-    q.to_disk = make(chan []Metric, 100)
-    q.from_disk = make(chan []Metric)
-    q.diskq_done = make(chan bool)
-
-    q.dqm = new(DiskQueueManager)
-    q.dqm.Init(dir, q.to_disk, q.from_disk, q.diskq_done)
-
-    go q.dqm.diskQueueManager()
+    q.from_disk = from_disk
+    q.to_disk = to_disk
 }
 
 func (q *QueueManager) take(n int) Batch {
@@ -94,9 +85,11 @@ func (q *QueueManager) take(n int) Batch {
     return b
 }
 
+/*
 func (q *QueueManager) Count() int {
-    return(q.CountMem() + q.CountDisk())
+    return(q.CountMem())
 }
+*/
 
 func (q *QueueManager) CountMem() int {
     x := len(q.memq) + len(q.prioq)
@@ -106,11 +99,6 @@ func (q *QueueManager) CountMem() int {
     }
 
     return(x)
-}
-
-func (q *QueueManager) CountDisk() int {
-    // return(q.dqm.Count() * q.batch_size)
-    return(q.dqm.Count())
 }
 
 func (q *QueueManager) CountReceived() uint64 {
@@ -280,8 +268,4 @@ func (q *QueueManager) shutdown() {
     }
 
     glog.Infof("qmgr: Asking disk queue to shutdown.")
-    q.diskq_done <- true
-
-    // wait for dqm to finish persisting data
-    <-q.diskq_done
 }

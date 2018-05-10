@@ -33,7 +33,7 @@ type Configuration struct {
     Tags map[string]string
 }
 
-func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager) {
+func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr *DiskQueueManager) {
     for {
         now := uint64(time.Now().Unix())
 
@@ -45,7 +45,7 @@ func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager) {
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(qmgr.CountDrops()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(qmgr.CountDisk()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
 
         for _, metric := range metrics {
@@ -56,7 +56,7 @@ func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager) {
     }
 }
 
-func showStats(recvq chan []Metric, qmgr *QueueManager) {
+func showStats(recvq chan []Metric, qmgr *QueueManager, dqmgr *DiskQueueManager) {
     var last_received uint64
     var last_sent uint64
 
@@ -68,7 +68,7 @@ func showStats(recvq chan []Metric, qmgr *QueueManager) {
         diff_received := received - last_received
         diff_sent := sent - last_sent
 
-        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, qmgr.CountDisk(), diff_received, diff_sent, qmgr.CountDrops(), len(qmgr.requests_queue))
+        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, dqmgr.Count(), diff_received, diff_sent, qmgr.CountDrops(), len(qmgr.requests_queue))
 
         last_received = received
         last_sent = sent
@@ -112,8 +112,16 @@ func main() {
 
     glog.Info("Starting")
 
+    disk_enqueue := make(chan []Metric, 100)
+    disk_dequeue := make(chan []Metric)
+
+    shutdown_qmgr := make(chan bool)
     qmgr := new(QueueManager)
-    qmgr.Init(configuration.MemoryQueueSize, "qdir")
+    qmgr.Init(configuration.MemoryQueueSize, disk_enqueue, disk_dequeue)
+
+    shutdown_dqmgr := make(chan bool)
+    dqmgr := new(DiskQueueManager)
+    dqmgr.Init("dirq", disk_enqueue, disk_dequeue, shutdown_dqmgr)
 
     nb_senders := 5
 
@@ -125,8 +133,8 @@ func main() {
 
     shutdown_server := make(chan bool, 1)
     go r.server(shutdown_server)
-    go showStats(recvq, qmgr)
-    go sendStats(recvq, prioq, qmgr)
+    go showStats(recvq, qmgr, dqmgr)
+    go sendStats(recvq, prioq, qmgr, dqmgr)
 
     qmgr_chan := make(chan QMessage)
 
@@ -140,8 +148,8 @@ func main() {
         go sender(name, qmgr_chan, c, done, senders_wg)
     }
 
-    shutdown_qmgr := make(chan bool)
     go qmgr.queueManager(1000, recvq, prioq, qmgr_chan, shutdown_qmgr)
+    go dqmgr.diskQueueManager()
 
     c := make(chan os.Signal, 2)
     signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -165,8 +173,13 @@ func main() {
     glog.Infof("main: Stopping queue manager")
     shutdown_qmgr <- true
 
-    glog.Infof("Waiting for queue manager.")
+    glog.Infof("main: Waiting for queue manager.")
     <-shutdown_qmgr
 
-    glog.Infof("All routines finished. Exiting.")
+    glog.Infof("main: Stopping disk queue manager")
+    shutdown_dqmgr <- true
+    glog.Infof("main: Waiting for disk queue manager.")
+    <-shutdown_dqmgr
+
+    glog.Infof("main: All routines finished. Exiting.")
 }

@@ -46,7 +46,7 @@ func (q *DiskQueueManager) Init(dir string, recvq chan []Metric, sendq chan []Me
 }
 
 func (q *DiskQueueManager) Count() int {
-    return(int(q.diskq.Length()) * q.batch_size)
+    return(int(q.diskq.Length()) * q.batch_size + len(q.diskbuf) + len(q.tosend))
 }
 
 func (q *DiskQueueManager) queue_to_disk(metrics []Metric, force bool) error {
