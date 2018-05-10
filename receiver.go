@@ -28,8 +28,14 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         "application/json",
     )
 
-    // XXX: Check method
+    if req.Method != "POST" {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+    }
+
     // XXX: Check for ?details
+
+    glog.V(5).Infof("Query: %v", req.URL.RawQuery)
+
     var reader io.ReadCloser
 
     switch req.Header.Get("Content-Encoding") {
@@ -133,7 +139,7 @@ func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
 
     for ok := s.Scan(); ok; ok = s.Scan()  {
         line := s.Text()
-        //fmt.Println("handleTelnet: Read line [" + line + "]")
+        // glog.V(5).Infof("handleTelnet: Read line [%v]", line)
 
         fields := strings.Fields(line)
 

@@ -20,6 +20,8 @@ const VERSION string = "0.1"
 
 var configuration Configuration
 
+var live_senders int32 = 0
+
 type Configuration struct {
     ListenPort int
     Brokers []string
@@ -28,32 +30,45 @@ type Configuration struct {
     Senders int
     SendBatchSize int
     DiskBatchSize int
+    Tags map[string]string
 }
 
-func sendStats(prioq chan Metric, qmgr *QueueManager) {
-    hostname, _ := os.Hostname()
-
+func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager) {
     for {
-        tags := map[string]string{"host": hostname}
-        metric := Metric{Metric:"tsdk.memq.count", Value:float64(qmgr.CountMem()), Timestamp: uint64(time.Now().Unix()), Tags: tags}
-        prioq <- metric
+        now := uint64(time.Now().Unix())
+
+        metrics := make([]Metric, 0, 10)
+        metrics = append(metrics, Metric{Metric:"tsdk.memq.count", Value:float64(qmgr.CountMem()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.memq.limit", Value:float64(qmgr.max), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(qmgr.CountReceived()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(qmgr.CountSent()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(qmgr.CountDrops()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(qmgr.CountDisk()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
+
+        for _, metric := range metrics {
+            prioq <- metric
+        }
+
         <-time.After(time.Second)
     }
 }
 
 func showStats(recvq chan []Metric, qmgr *QueueManager) {
-    var last_received int
-    var last_sent int
+    var last_received uint64
+    var last_sent uint64
 
     for {
         <-time.After(time.Second)
-        received := qmgr.received
-        sent := qmgr.sent
+        received := qmgr.CountReceived()
+        sent := qmgr.CountSent()
 
         diff_received := received - last_received
         diff_sent := sent - last_sent
 
-        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, qmgr.CountDisk(), diff_received, diff_sent, qmgr.Drops(), len(qmgr.requests_queue))
+        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, qmgr.CountDisk(), diff_received, diff_sent, qmgr.CountDrops(), len(qmgr.requests_queue))
 
         last_received = received
         last_sent = sent
@@ -74,6 +89,13 @@ func loadConfig(filename string) {
     if err != nil {
         glog.Fatal("error:", err)
         os.Exit(1)
+    }
+
+    hostname, _ := os.Hostname()
+
+    _, ok := configuration.Tags["host"]
+    if ! ok {
+        configuration.Tags["host"] = hostname
     }
 }
 
@@ -104,7 +126,7 @@ func main() {
     shutdown_server := make(chan bool, 1)
     go r.server(shutdown_server)
     go showStats(recvq, qmgr)
-    go sendStats(prioq, qmgr)
+    go sendStats(recvq, prioq, qmgr)
 
     qmgr_chan := make(chan QMessage)
 

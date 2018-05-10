@@ -17,11 +17,11 @@ type QueueManager struct {
     // Max size of the memory queue
     max int
 
-    // Number of metrics received
-    received int
+    // Total number of metrics received
+    received uint64
 
-    // Number of metrics sent
-    sent int
+    // Total number of metrics sent
+    sent uint64
 
     // Number of dropped/discarded metrics
     drops int
@@ -48,10 +48,11 @@ func (q *QueueManager) Init(size int, dir string) {
     q.memq = make([]Metric, 0, size)
     q.prioq = make([]Metric, 0, 1000)
     q.trx = make(map[string]Batch)
-    q.dqm = new(DiskQueueManager)
     q.to_disk = make(chan []Metric, 100)
     q.from_disk = make(chan []Metric)
     q.diskq_done = make(chan bool)
+
+    q.dqm = new(DiskQueueManager)
     q.dqm.Init(dir, q.to_disk, q.from_disk, q.diskq_done)
 
     go q.dqm.diskQueueManager()
@@ -60,7 +61,7 @@ func (q *QueueManager) Init(size int, dir string) {
 func (q *QueueManager) take(n int) Batch {
     var b Batch
 
-    qsize := len(q.prioq) + len(q.memq) 
+    qsize := len(q.prioq) + len(q.memq)
     if n > qsize {
         n = qsize
     }
@@ -112,7 +113,15 @@ func (q *QueueManager) CountDisk() int {
     return(q.dqm.Count())
 }
 
-func (q *QueueManager) Drops() int {
+func (q *QueueManager) CountReceived() uint64 {
+    return(q.received)
+}
+
+func (q *QueueManager) CountSent() uint64 {
+    return(q.sent)
+}
+
+func (q *QueueManager) CountDrops() int {
     return(q.drops)
 }
 
@@ -198,7 +207,7 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Me
             case metrics = <-recvq:
                 glog.V(4).Infof("qmgr: Received %v metrics from the recvq", len(metrics))
                 q.add(metrics, false)
-                q.received += len(metrics)
+                q.received += uint64(len(metrics))
 
                 if len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) >= q.batch_size {
                     q.dispatch()
@@ -225,7 +234,7 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Me
                     }
                 } else if req.msg == "COMMIT" {
                     glog.V(3).Infof("qmgr: COMMIT request from %s", req.name)
-                    q.sent += len(q.trx[req.name].metrics)
+                    q.sent += uint64(len(q.trx[req.name].metrics))
                     delete(q.trx, req.name)
                 } else if req.msg == "ROLLBACK" {
                     glog.V(3).Infof("qmgr: ROLLBACK request from %s", req.name)

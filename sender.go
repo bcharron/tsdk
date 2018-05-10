@@ -1,10 +1,11 @@
 package main;
 
 import(
+    "encoding/json"
     "github.com/golang/glog"
     "github.com/Shopify/sarama"
     "sync"
-    "encoding/json"
+    "sync/atomic"
 )
 
 func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup) {
@@ -13,6 +14,9 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
 
     wg.Add(1)
     defer wg.Done()
+
+    atomic.AddInt32(&live_senders, 1)
+    defer atomic.AddInt32(&live_senders, -1)
 
     producer, err := sarama.NewSyncProducer(configuration.Brokers, sconfig)
     if err != nil {

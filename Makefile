@@ -6,7 +6,7 @@ tsdk: $(src)
 	go build $(src)
 
 run: tsdk
-	./tsdk -logtostderr=true -v=4
+	./tsdk -logtostderr=true -v=5
 
 clean:
 	rm -f tsdk

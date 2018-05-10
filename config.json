@@ -5,5 +5,8 @@
     "ReceiveBuffer": 10000,
     "Senders": 5,
     "SendBatchSize": 1000,
-    "DiskBatchSize": 1000
+    "DiskBatchSize": 1000,
+    "Tags": {
+        "env": "prod"
+    }
 }
