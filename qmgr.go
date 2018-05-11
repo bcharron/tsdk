@@ -49,7 +49,8 @@ func (q *QueueManager) Init(size int, to_disk chan []Metric, from_disk chan []Me
     q.to_disk = to_disk
 }
 
-func (q *QueueManager) take(n int) Batch {
+// Take up to 'n' metrics from the queue, and starts a transaction.
+func (q *QueueManager) take(n int, trx_name string) Batch {
     var b Batch
 
     qsize := len(q.prioq) + len(q.memq)
@@ -80,6 +81,10 @@ func (q *QueueManager) take(n int) Batch {
         copy(b.metrics, q.memq)
         q.memq = q.memq[n:]
         // glog.Infof("Queue size after : %v", len(q.memq))
+    }
+
+    if len(b.metrics) > 0 {
+        q.trx[trx_name] = b
     }
 
     return b
@@ -157,7 +162,7 @@ func (q *QueueManager) send_to_disk(metrics []Metric, wait bool) {
                         glog.Warningf("Queue is full. Dropped %v messages since starting.", q.drops)
                     }
 
-                    q.drops++
+                    q.drops += len(metrics)
             }
         }
     }
@@ -165,20 +170,36 @@ func (q *QueueManager) send_to_disk(metrics []Metric, wait bool) {
 
 func (q *QueueManager) dispatch() {
     req := q.requests_queue[0]
-    b := q.take(q.batch_size)
+    b := q.take(q.batch_size, req.name)
     glog.V(3).Infof("qmgr: Sending a batch of %v metrics to %s", len(b.metrics), req.name)
     req.sender_channel <- b
-    q.trx[req.name] = b
     q.requests_queue = q.requests_queue[1:]
  }
 
+func (q *QueueManager) rollback(name string) {
+    b, ok := q.trx[name]
+    if ok {
+        q.add(b.metrics, true)
+        delete(q.trx, name)
+    }
+}
+
+func (q *QueueManager) commit(name string) {
+    b, ok := q.trx[name]
+    if ok {
+        q.sent += uint64(len(b.metrics))
+        delete(q.trx, name)
+    }
+}
+
 // Takes incoming metrics from recvq, queue them in memory or disk, and offer
 // them to sendq.
-func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Metric, qmgr chan QMessage, done chan bool) {
+func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr chan QMessage, done chan bool) {
     var metrics []Metric
     var b Batch
     var from_diskq chan []Metric
 
+    // timer := time.After(time.Second * configuration.FlushFrequency)
     timer := time.After(time.Second * 5)
 
     alive := true
@@ -214,22 +235,17 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Me
                 if req.msg == "TAKE" {
                    if len(q.memq) > q.batch_size {
                        glog.V(3).Infof("qmgr: TAKE request from %s", req.name)
-                       b = q.take(q.batch_size)
+                       b = q.take(q.batch_size, req.name)
                        req.sender_channel <- b
-                       q.trx[req.name] = b
                     } else {
                         q.requests_queue = append(q.requests_queue, req)
                     }
                 } else if req.msg == "COMMIT" {
                     glog.V(3).Infof("qmgr: COMMIT request from %s", req.name)
-                    q.sent += uint64(len(q.trx[req.name].metrics))
-                    delete(q.trx, req.name)
+                    q.commit(req.name)
                 } else if req.msg == "ROLLBACK" {
                     glog.V(3).Infof("qmgr: ROLLBACK request from %s", req.name)
-                    b := q.trx[req.name]
-                    q.add(b.metrics, true)
-                    // q.memq = append(q.memq, b.metrics...)
-                    delete(q.trx, req.name)
+                    q.rollback(req.name)
                 } else {
                     glog.Warningf("qmgr: Unknown message from %s: %v", req.name, req.msg)
                 }
@@ -239,6 +255,7 @@ func (q *QueueManager) queueManager(size int, recvq chan []Metric, prioc chan Me
                 for len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) > 0 {
                     q.dispatch()
                 }
+                // timer = time.After(time.Second * configuration.FlushPeriod)
                 timer = time.After(time.Second * 5)
                 glog.V(4).Infof("qmgr: Done flushing timed memq.")
 

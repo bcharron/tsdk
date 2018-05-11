@@ -27,6 +27,7 @@ type Configuration struct {
     Brokers []string
     ReceiveBuffer int
     MemoryQueueSize int
+    FlushPeriod int
     Senders int
     SendBatchSize int
     DiskBatchSize int
@@ -148,7 +149,7 @@ func main() {
         go sender(name, qmgr_chan, c, done, senders_wg)
     }
 
-    go qmgr.queueManager(1000, recvq, prioq, qmgr_chan, shutdown_qmgr)
+    go qmgr.queueManager(recvq, prioq, qmgr_chan, shutdown_qmgr)
     go dqmgr.diskQueueManager()
 
     c := make(chan os.Signal, 2)

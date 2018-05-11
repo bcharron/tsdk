@@ -3,6 +3,7 @@
     "Brokers": ["localhost:9092"],
     "MemoryQueueSize": 75000,
     "ReceiveBuffer": 10000,
+    "FlushPeriod": 5,
     "Senders": 5,
     "SendBatchSize": 1000,
     "DiskBatchSize": 1000,
