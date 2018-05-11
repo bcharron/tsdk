@@ -10,3 +10,9 @@ run: tsdk
 
 clean:
 	rm -f tsdk
+
+test:
+	go test
+
+vtest:
+	go test -v -args -logtostderr=true -v=5
