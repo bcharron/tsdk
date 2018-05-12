@@ -1,6 +1,7 @@
 {
-    "ListenPort": 4242,
+    "ListenAddr": ":4242",
     "Brokers": ["localhost:9092"],
+    "Topic": "tsdb_test",
     "MemoryQueueSize": 75000,
     "ReceiveBuffer": 10000,
     "FlushPeriod": 5,

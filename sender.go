@@ -66,7 +66,7 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
             value := sarama.StringEncoder(json_output)
 
             kafkaMessage := sarama.ProducerMessage{
-                Topic: "tsdb_test",
+                Topic: configuration.Topic,
                 Key: key,
                 Value: value,
                 Headers: []sarama.RecordHeader{},

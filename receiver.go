@@ -257,10 +257,9 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
 }
 
 func (r *Receiver) server(done chan bool) {
-    ln, err := net.Listen("tcp", ":4242")
+    ln, err := net.Listen("tcp", configuration.ListenAddr)
     if err != nil {
-        fmt.Println(err)
-        return
+        panic(err)
     }
 
     fakeListener := new(FakeListener)

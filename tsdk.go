@@ -5,7 +5,6 @@
 package main
 
 import (
-    "encoding/json"
     "flag"
     "fmt"
     "github.com/golang/glog"
@@ -18,21 +17,9 @@ import (
 
 const VERSION string = "0.1"
 
-var configuration Configuration
+var configuration *Configuration
 
 var live_senders int32 = 0
-
-type Configuration struct {
-    ListenPort int
-    Brokers []string
-    ReceiveBuffer int
-    MemoryQueueSize int
-    FlushPeriod int
-    Senders int
-    SendBatchSize int
-    DiskBatchSize int
-    Tags map[string]string
-}
 
 func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr *DiskQueueManager) {
     for {
@@ -76,37 +63,14 @@ func showStats(recvq chan []Metric, qmgr *QueueManager, dqmgr *DiskQueueManager)
     }
 }
 
-func loadConfig(filename string) {
-    file, err := os.Open(filename);
-    if err != nil {
-        glog.Fatalf("Unable to open config file: %v", err)
-        os.Exit(1)
-    }
-
-    defer file.Close()
-    decoder := json.NewDecoder(file)
-
-    err = decoder.Decode(&configuration)
-    if err != nil {
-        glog.Fatal("error:", err)
-        os.Exit(1)
-    }
-
-    hostname, _ := os.Hostname()
-
-    _, ok := configuration.Tags["host"]
-    if ! ok {
-        configuration.Tags["host"] = hostname
-    }
-}
 
 func main() {
     flag.Parse()
 
-    loadConfig("config.json")
+    configuration = loadConfig("config.json")
 
-    fmt.Println("Brokers:", configuration.Brokers)
-    fmt.Println("ListenPort:", configuration.ListenPort)
+    glog.Infof("Brokers: %v", configuration.Brokers)
+    glog.Infof("ListenAddr: %v", configuration.ListenAddr)
 
     // Senders need to be shutdown before queue managers.
     senders_wg := new(sync.WaitGroup)

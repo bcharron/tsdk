@@ -1,4 +1,4 @@
-src=tsdk.go metric.go sender.go qmessage.go qmgr.go dqmgr.go fake.go receiver.go
+src=tsdk.go metric.go sender.go qmessage.go qmgr.go dqmgr.go fake.go receiver.go configuration.go
 
 all: tsdk
 
