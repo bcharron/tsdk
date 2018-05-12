@@ -38,11 +38,11 @@ type QueueManager struct {
     to_disk chan []Metric
 }
 
-func (q *QueueManager) Init(size int, to_disk chan []Metric, from_disk chan []Metric) {
-    q.batch_size = configuration.SendBatchSize
+func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_disk chan []Metric) {
+    q.batch_size = config.SendBatchSize
     q.requests_queue = make ([]QMessage, 0, 100)
-    q.max = size
-    q.memq = make([]Metric, 0, size)
+    q.max = config.MemoryQueueSize
+    q.memq = make([]Metric, 0, q.max)
     q.prioq = make([]Metric, 0, 1000)
     q.trx = make(map[string]Batch)
     q.from_disk = from_disk
@@ -58,7 +58,7 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
         n = qsize
     }
 
-    b.metrics = make([]Metric, n)
+    b.metrics = make([]Metric, 0, n)
 
     // Take metrics from the priority queue, if any
     if len(q.prioq) > 0 {
@@ -67,7 +67,7 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
             pn = len(q.prioq)
         }
 
-        copy(b.metrics, q.prioq)
+        b.metrics = append(b.metrics, q.prioq[:pn]...)
         q.prioq = q.prioq[pn:]
         n -= pn
     }
@@ -77,10 +77,10 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
     }
 
     if n > 0 {
-        // glog.Infof("Queue size before: %v", len(q.memq))
-        copy(b.metrics, q.memq)
+        glog.Infof("Queue size before: %v", len(q.memq))
+        b.metrics = append(b.metrics, q.memq[:n]...)
         q.memq = q.memq[n:]
-        // glog.Infof("Queue size after : %v", len(q.memq))
+        glog.Infof("Queue size after : %v", len(q.memq))
     }
 
     if len(b.metrics) > 0 {

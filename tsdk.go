@@ -83,7 +83,7 @@ func main() {
 
     shutdown_qmgr := make(chan bool)
     qmgr := new(QueueManager)
-    qmgr.Init(configuration.MemoryQueueSize, disk_enqueue, disk_dequeue)
+    qmgr.Init(configuration, disk_enqueue, disk_dequeue)
 
     shutdown_dqmgr := make(chan bool)
     dqmgr := new(DiskQueueManager)
