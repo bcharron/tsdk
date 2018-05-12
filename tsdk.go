@@ -31,6 +31,7 @@ func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(qmgr.CountReceived()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(qmgr.CountSent()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(qmgr.CountDrops()), Timestamp: now, Tags: configuration.Tags})
+        // metrics = append(metrics, Metric{Metric:"tsdk.metrics.invalid", Value:float64(counters.invalid), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
