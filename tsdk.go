@@ -69,6 +69,7 @@ func main() {
     flag.Parse()
 
     configuration = loadConfig("config.json")
+    counters := new(Counters)
 
     glog.Infof("Brokers: %v", configuration.Brokers)
     glog.Infof("ListenAddr: %v", configuration.ListenAddr)
@@ -83,11 +84,11 @@ func main() {
 
     shutdown_qmgr := make(chan bool)
     qmgr := new(QueueManager)
-    qmgr.Init(configuration, disk_enqueue, disk_dequeue)
+    qmgr.Init(configuration, disk_enqueue, disk_dequeue, counters)
 
     shutdown_dqmgr := make(chan bool)
     dqmgr := new(DiskQueueManager)
-    dqmgr.Init("dirq", disk_enqueue, disk_dequeue, shutdown_dqmgr)
+    dqmgr.Init("dirq", disk_enqueue, disk_dequeue, shutdown_dqmgr, counters)
 
     nb_senders := 5
 
@@ -98,7 +99,7 @@ func main() {
     r.recvq = recvq
 
     shutdown_server := make(chan bool, 1)
-    go r.server(shutdown_server)
+    go r.server(shutdown_server, counters)
     go showStats(recvq, qmgr, dqmgr)
     go sendStats(recvq, prioq, qmgr, dqmgr)
 

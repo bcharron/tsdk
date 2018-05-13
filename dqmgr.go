@@ -24,7 +24,7 @@ type DiskQueueManager struct {
     done chan bool
 }
 
-func (q *DiskQueueManager) Init(dir string, recvq chan []Metric, sendq chan []Metric, done chan bool) (bool, error) {
+func (q *DiskQueueManager) Init(dir string, recvq chan []Metric, sendq chan []Metric, done chan bool, counters *Counters) (bool, error) {
     var err error
 
     q.recvq = recvq

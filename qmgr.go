@@ -17,20 +17,13 @@ type QueueManager struct {
     // Max size of the memory queue
     max int
 
-    // Total number of metrics received
-    received uint64
-
-    // Total number of metrics sent
-    sent uint64
-
-    // Number of dropped/discarded metrics
-    drops int
-
     // Number of metrics to send at once
     batch_size int
 
     // Senders waiting for batches
     requests_queue []QMessage
+
+    counters *Counters
 
     dqm *DiskQueueManager
 
@@ -38,7 +31,7 @@ type QueueManager struct {
     to_disk chan []Metric
 }
 
-func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_disk chan []Metric) {
+func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_disk chan []Metric, counters *Counters) {
     q.batch_size = config.SendBatchSize
     q.requests_queue = make ([]QMessage, 0, 100)
     q.max = config.MemoryQueueSize
@@ -47,6 +40,7 @@ func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_d
     q.trx = make(map[string]Batch)
     q.from_disk = from_disk
     q.to_disk = to_disk
+    q.counters = counters
 }
 
 // Take up to 'n' metrics from the queue, and starts a transaction.
@@ -107,15 +101,15 @@ func (q *QueueManager) CountMem() int {
 }
 
 func (q *QueueManager) CountReceived() uint64 {
-    return(q.received)
+    return(q.counters.received)
 }
 
 func (q *QueueManager) CountSent() uint64 {
-    return(q.sent)
+    return(q.counters.sent)
 }
 
-func (q *QueueManager) CountDrops() int {
-    return(q.drops)
+func (q *QueueManager) CountDrops() uint64 {
+    return(q.counters.dropped)
 }
 
 func (q *QueueManager) add_mem(metric Metric) {
@@ -158,11 +152,11 @@ func (q *QueueManager) send_to_disk(metrics []Metric, wait bool) {
                     glog.Infof("qmgr: Sent %v metrics to disk", len(metrics))
 
                 default:
-                    if q.drops % 1000 == 0 {
-                        glog.Warningf("Queue is full. Dropped %v messages since starting.", q.drops)
-                    }
+                    q.counters.inc_dropped(uint64(len(metrics)))
 
-                    q.drops += len(metrics)
+                    if q.counters.dropped % 1000 == 0 || q.counters.dropped == 1 {
+                        glog.Warningf("Queue is full. Dropped %v messages since starting.", q.counters.dropped)
+                    }
             }
         }
     }
@@ -187,7 +181,7 @@ func (q *QueueManager) rollback(name string) {
 func (q *QueueManager) commit(name string) {
     b, ok := q.trx[name]
     if ok {
-        q.sent += uint64(len(b.metrics))
+        q.counters.inc_sent(uint64(len(b.metrics)))
         delete(q.trx, name)
     }
 }
@@ -216,7 +210,7 @@ func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr
             case metrics = <-recvq:
                 glog.V(4).Infof("qmgr: Received %v metrics from the recvq", len(metrics))
                 q.add(metrics, false)
-                q.received += uint64(len(metrics))
+                q.counters.inc_received(uint64(len(metrics)))
 
                 if len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) >= q.batch_size {
                     q.dispatch()
@@ -225,7 +219,7 @@ func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr
             case metric := <-prioc:
                 glog.V(4).Infof("qmgr: Received metric from the prioq")
                 q.add_prio(metric)
-                q.received++
+                q.counters.inc_received(1)
 
             case metrics = <-from_diskq:
                 glog.V(4).Infof("qmgr: Received %v metrics from the diskq", len(metrics))

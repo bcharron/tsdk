@@ -7,13 +7,14 @@ import "github.com/golang/glog"
 func TestCommit(t *testing.T) {
     qsize := 10
 
+    var counters *Counters = new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
     m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
 
     qmgr := new(QueueManager)
-    qmgr.Init(config, nil, nil)
+    qmgr.Init(config, nil, nil, counters)
     count := qmgr.CountMem()
     if count != 0 {
         t.Error("Expected 0 metric in memq, got", count)
@@ -43,13 +44,14 @@ func TestCommit(t *testing.T) {
 func TestRollback(t *testing.T) {
     qsize := 10
 
+    counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
     m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
 
     qmgr := new(QueueManager)
-    qmgr.Init(config, nil, nil)
+    qmgr.Init(config, nil, nil, counters)
     count := qmgr.CountMem()
     if count != 0 {
         t.Error("Expected 0 metric in memq, got", count)
@@ -78,12 +80,13 @@ func TestRollback(t *testing.T) {
 func TestInternalQueue(t *testing.T) {
     qsize := 10
 
+    counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
     m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
     qmgr := new(QueueManager)
-    qmgr.Init(config, nil, nil)
+    qmgr.Init(config, nil, nil, counters)
     count := qmgr.CountMem()
     if count != 0 {
         t.Error("Expected 0 metric in memq, got", count)
@@ -114,6 +117,7 @@ func TestInternalQueue(t *testing.T) {
 func TestQueueDiscard(t *testing.T) {
     qsize := 10
 
+    counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
@@ -121,7 +125,7 @@ func TestQueueDiscard(t *testing.T) {
     fake_disk_from := make(chan []Metric)
 
     qmgr := new(QueueManager)
-    qmgr.Init(config, fake_disk_send, fake_disk_from)
+    qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     metrics := make([]Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
@@ -140,7 +144,7 @@ func TestQueueDiscard(t *testing.T) {
     }
 
     qmgr.add(metrics, false)
-    if qmgr.CountDrops() != len(metrics) {
+    if qmgr.CountDrops() != uint64(len(metrics)) {
         t.Errorf("Expected queue to have %v drops but found %v drops", len(metrics), qmgr.CountDrops())
     }
 }
@@ -154,8 +158,9 @@ func TestQueueSendDisk(t *testing.T) {
     fake_disk_send := make(chan []Metric, 100)
     fake_disk_from := make(chan []Metric)
 
+    counters := new(Counters)
     qmgr := new(QueueManager)
-    qmgr.Init(config, fake_disk_send, fake_disk_from)
+    qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     metrics := make([]Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
@@ -183,6 +188,7 @@ func TestQueueSendDisk(t *testing.T) {
 func TestShutdown(t *testing.T) {
     qsize := 10
 
+    counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
@@ -190,7 +196,7 @@ func TestShutdown(t *testing.T) {
     fake_disk_from := make(chan []Metric)
 
     qmgr := new(QueueManager)
-    qmgr.Init(config, fake_disk_send, fake_disk_from)
+    qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
     metrics := make([]Metric, 0, qsize)
@@ -254,6 +260,7 @@ func TestShutdown(t *testing.T) {
 func TestTake(t *testing.T) {
     qsize := 10
 
+    counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
@@ -261,7 +268,7 @@ func TestTake(t *testing.T) {
     fake_disk_from := make(chan []Metric)
 
     qmgr := new(QueueManager)
-    qmgr.Init(config, fake_disk_send, fake_disk_from)
+    qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
     metrics := make([]Metric, 0, qsize)

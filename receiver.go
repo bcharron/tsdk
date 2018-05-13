@@ -17,6 +17,7 @@ import(
 
 type Receiver struct {
     recvq chan []Metric
+    counters *Counters
 }
 
 func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
@@ -44,6 +45,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 glog.Warningf("Error reading gzipd body: %v", err)
                 w.WriteHeader(http.StatusBadRequest)
+                r.counters.inc_http_errors(1)
                 return
             }
 
@@ -54,6 +56,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 glog.Warningf("Error reading deflated body: %v", err)
                 w.WriteHeader(http.StatusBadRequest)
+                r.counters.inc_http_errors(1)
                 return
             }
 
@@ -67,6 +70,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     if err != nil {
         glog.Info("httphandler: ERROR Reading Request Body:", err)
         w.WriteHeader(http.StatusBadRequest)
+        r.counters.inc_http_errors(1)
         return
     }
 
@@ -90,6 +94,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         // c.Write([]byte("Not JSON"))
         glog.Warningf("httphandler: Body received from %v doesn't look like JSON.", req.RemoteAddr)
         w.WriteHeader(http.StatusBadRequest)
+        r.counters.inc_invalid(1)
         return
     }
 
@@ -107,6 +112,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         if err != nil {
             glog.Warning("httphandler: Failed to decode JSON: ", err)
             w.WriteHeader(http.StatusBadRequest)
+            r.counters.inc_invalid(1)
             return
         }
     }
@@ -119,6 +125,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
             valid_metrics = append(valid_metrics, m)
         } else {
             glog.Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
+            r.counters.inc_invalid(1)
         }
     }
 
@@ -168,18 +175,21 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
 
     if len(fields) < 5 {
         c.Write([]byte("ERROR: Bad PUT line: not enough fields.\n"))
+        r.counters.inc_invalid(1)
         return
     }
 
     if fields[0] != "put" {
         glog.Infof("Garbage from %v:\"%v\"", c.RemoteAddr(), line)
         c.Write([]byte("ERROR: Bad line. Should start with 'put'\n"))
+        r.counters.inc_invalid(1)
         return
     }
 
     m.Metric = fields[1]
     if len(m.Metric) > 256 {
         glog.Infof("Metric name too long from %v: \"%v\"", c.RemoteAddr(), len(m.Metric))
+        r.counters.inc_invalid(1)
         c.Write([]byte("ERROR: Metric name is too long\n"))
         return
     }
@@ -187,6 +197,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     m.Timestamp, err = strconv.ParseUint(fields[2], 10, 64)
     if err != nil {
         glog.Infof("Invalid timestamp in PUT from %v: \"%v\"", c.RemoteAddr(), fields[2])
+        r.counters.inc_invalid(1)
         c.Write([]byte("ERROR: Invalid timestamp\n"))
         return
     }
@@ -194,6 +205,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     m.Value, err = strconv.ParseFloat(fields[3], 64)
     if err != nil {
         glog.Infof("Invalid value in PUT from %v: \"%v\"", c.RemoteAddr(), fields[3])
+        r.counters.inc_invalid(1)
         c.Write([]byte("ERROR: Invalid value. Expected float.\n"))
         return
     }
@@ -206,6 +218,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
             m.Tags[t[0]] = t[1]
         } else {
             glog.Infof("Invalid tags from %v: \"%v\"", c.RemoteAddr(), tags[x])
+            r.counters.inc_invalid(1)
             c.Write([]byte("ERROR: Invalid tags\n"))
             return
         }
@@ -256,7 +269,9 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
     }
 }
 
-func (r *Receiver) server(done chan bool) {
+func (r *Receiver) server(done chan bool, counters *Counters) {
+    r.counters = counters
+
     ln, err := net.Listen("tcp", configuration.ListenAddr)
     if err != nil {
         panic(err)
