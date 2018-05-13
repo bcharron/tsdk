@@ -84,12 +84,6 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
     return b
 }
 
-/*
-func (q *QueueManager) Count() int {
-    return(q.CountMem())
-}
-*/
-
 func (q *QueueManager) CountMem() int {
     x := len(q.memq) + len(q.prioq)
 
@@ -98,18 +92,6 @@ func (q *QueueManager) CountMem() int {
     }
 
     return(x)
-}
-
-func (q *QueueManager) CountReceived() uint64 {
-    return(q.counters.received)
-}
-
-func (q *QueueManager) CountSent() uint64 {
-    return(q.counters.sent)
-}
-
-func (q *QueueManager) CountDrops() uint64 {
-    return(q.counters.dropped)
 }
 
 func (q *QueueManager) add_mem(metric Metric) {

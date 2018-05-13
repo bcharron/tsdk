@@ -21,17 +21,18 @@ var configuration *Configuration
 
 var live_senders int32 = 0
 
-func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr *DiskQueueManager) {
+func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
     for {
         now := uint64(time.Now().Unix())
 
         metrics := make([]Metric, 0, 10)
         metrics = append(metrics, Metric{Metric:"tsdk.memq.count", Value:float64(qmgr.CountMem()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.memq.limit", Value:float64(qmgr.max), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(qmgr.CountReceived()), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(qmgr.CountSent()), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(qmgr.CountDrops()), Timestamp: now, Tags: configuration.Tags})
-        // metrics = append(metrics, Metric{Metric:"tsdk.metrics.invalid", Value:float64(counters.invalid), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(counters.received), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(counters.sent), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(counters.dropped), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.invalid", Value:float64(counters.invalid), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.http_errors", Value:float64(counters.http_errors), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
@@ -45,19 +46,20 @@ func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr
     }
 }
 
-func showStats(recvq chan []Metric, qmgr *QueueManager, dqmgr *DiskQueueManager) {
+func showStats(recvq chan []Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
     var last_received uint64
     var last_sent uint64
 
     for {
         <-time.After(time.Second)
-        received := qmgr.CountReceived()
-        sent := qmgr.CountSent()
+
+        received := counters.received
+        sent := counters.sent
 
         diff_received := received - last_received
         diff_sent := sent - last_sent
 
-        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, dqmgr.Count(), diff_received, diff_sent, qmgr.CountDrops(), len(qmgr.requests_queue))
+        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, dqmgr.Count(), diff_received, diff_sent, counters.dropped, len(qmgr.requests_queue))
 
         last_received = received
         last_sent = sent
@@ -100,8 +102,8 @@ func main() {
 
     shutdown_server := make(chan bool, 1)
     go r.server(shutdown_server, counters)
-    go showStats(recvq, qmgr, dqmgr)
-    go sendStats(recvq, prioq, qmgr, dqmgr)
+    go showStats(recvq, qmgr, dqmgr, counters)
+    go sendStats(recvq, prioq, qmgr, dqmgr, counters)
 
     qmgr_chan := make(chan QMessage)
 

@@ -139,13 +139,13 @@ func TestQueueDiscard(t *testing.T) {
         t.Errorf("Expected queue to have count=%v but found count=%v", qsize, qmgr.CountMem())
     }
 
-    if qmgr.CountDrops() != 0 {
-        t.Errorf("Expected queue to have no drops but found %v drops", qmgr.CountDrops())
+    if counters.dropped != 0 {
+        t.Errorf("Expected queue to have no drops but found %v drops", counters.dropped)
     }
 
     qmgr.add(metrics, false)
-    if qmgr.CountDrops() != uint64(len(metrics)) {
-        t.Errorf("Expected queue to have %v drops but found %v drops", len(metrics), qmgr.CountDrops())
+    if counters.dropped != uint64(len(metrics)) {
+        t.Errorf("Expected queue to have %v drops but found %v drops", len(metrics), counters.dropped)
     }
 }
 

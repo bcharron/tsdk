@@ -5,9 +5,9 @@ import "sync/atomic"
 type Counters struct {
     received uint64
     sent uint64
-    early_dropped uint64
-    dropped uint64
-    invalid uint64
+    early_dropped uint64    // Dropped because the recvq was full
+    dropped uint64          // Dropped because memq was full and disk queue wasn't responding fast-enough
+    invalid uint64          // Malformed json, invalid metric name, missing tags, etc.
     http_errors uint64
 }
 
