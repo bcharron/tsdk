@@ -297,3 +297,35 @@ func TestTake(t *testing.T) {
         t.Errorf("Expected CountMem to be %v but got %v", qsize + 1, qmgr.CountMem())
     }
 }
+
+func BenchmarkMem(b *testing.B) {
+    qsize := 10
+
+    counters := new(Counters)
+    config := new(Configuration)
+    config.MemoryQueueSize = qsize
+
+    // fake_disk_send := make(chan []Metric, 100)
+    // fake_disk_from := make(chan []Metric)
+
+    qmgr := new(QueueManager)
+    qmgr.Init(config, nil, nil, counters)
+
+    val := 0
+    metrics := make([]Metric, 0, qsize)
+    for x := 0; x < qsize; x++ {
+        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
+        metrics = append(metrics, m)
+        val += x
+    }
+
+    //b.ResetTimer()
+
+    for i := 0; i < b.N; i++ {
+        qmgr.add(metrics, false)
+        b.StopTimer()
+        qmgr.ClearMemQueue()
+        b.StartTimer()
+    }
+}
+

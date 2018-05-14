@@ -43,6 +43,10 @@ func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_d
     q.counters = counters
 }
 
+func (q *QueueManager) ClearMemQueue() {
+    q.memq = make([]Metric, 0, q.max)
+}
+
 // Take up to 'n' metrics from the queue, and starts a transaction.
 func (q *QueueManager) take(n int, trx_name string) Batch {
     var b Batch
