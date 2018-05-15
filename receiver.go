@@ -119,12 +119,15 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
 
     glog.V(3).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
 
+    errors := make([]string, 0)
     valid_metrics := make([]Metric, 0, len(metrics))
     for _, m := range metrics {
         if ok, errmsg := m.isValid(); ok {
             valid_metrics = append(valid_metrics, m)
         } else {
-            glog.Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
+            glog.V(3).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
+            errmsg2 := fmt.Sprintf("%v: %v", m.Metric, errmsg)
+            errors = append(errors, errmsg2)
             r.counters.inc_invalid(1)
         }
     }
@@ -133,8 +136,25 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         r.recvq <- valid_metrics
     }
 
-    // XXX: Respond with number failed and stuff
-    io.WriteString(w, "Thanks for the metrics.\n")
+    out := new(HTTPOutputMessage)
+    out.Success = len(valid_metrics)
+    out.Failed = len(errors)
+    out.Errors = errors
+
+    json_output, err := json.Marshal(out)
+    if err != nil {
+        glog.Warningf("Unable to marshal HTTPOutputMessage: %v", err)
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    io.WriteString(w, string(json_output))
+}
+
+type HTTPOutputMessage struct {
+    Success int
+    Failed int
+    Errors []string
 }
 
 func (r *Receiver) HandleHttpVersion(w http.ResponseWriter, req *http.Request) {
