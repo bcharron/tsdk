@@ -8,6 +8,7 @@
     "Senders": 5,
     "SendBatchSize": 1000,
     "DiskBatchSize": 1000,
+    "DiskQueuePath": "dirq",
     "Tags": {
         "env": "prod"
     }

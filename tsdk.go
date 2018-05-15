@@ -90,7 +90,7 @@ func main() {
 
     shutdown_dqmgr := make(chan bool)
     dqmgr := new(DiskQueueManager)
-    dqmgr.Init("dirq", disk_enqueue, disk_dequeue, shutdown_dqmgr, counters)
+    dqmgr.Init(configuration.DiskQueuePath, disk_enqueue, disk_dequeue, shutdown_dqmgr, counters)
 
     nb_senders := 5
 

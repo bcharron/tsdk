@@ -16,11 +16,27 @@ type Configuration struct {
     Senders int
     SendBatchSize int
     DiskBatchSize int
+    DiskQueuePath string
     Tags map[string]string
+}
+
+func (c *Configuration) loadDefaults() {
+    c.ListenAddr = ":4242"
+    c.Brokers = make([]string, 0)
+    c.Topic = "tsdb"
+    c.ReceiveBuffer = 10000
+    c.MemoryQueueSize = 100000
+    c.FlushPeriod = 5
+    c.Senders = 5
+    c.SendBatchSize = 1000
+    c.DiskBatchSize = 1000
+    c.DiskQueuePath = "dirq"
+    c.Tags = make(map[string]string)
 }
 
 func loadConfig(filename string) *Configuration {
     config := new(Configuration)
+    config.loadDefaults()
 
     file, err := os.Open(filename)
     if err != nil {
