@@ -198,14 +198,14 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     var err error
 
     if len(fields) < 5 {
-        c.Write([]byte("ERROR: Bad PUT line: not enough fields.\n"))
+        c.Write([]byte("put: Bad PUT line: not enough fields.\n"))
         r.counters.inc_invalid(1)
         return
     }
 
     if fields[0] != "put" {
         glog.Infof("Garbage from %v:\"%v\"", c.RemoteAddr(), line)
-        c.Write([]byte("ERROR: Bad line. Should start with 'put'\n"))
+        c.Write([]byte("put: Bad line. Should start with 'put'\n"))
         r.counters.inc_invalid(1)
         return
     }
@@ -214,7 +214,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     if len(m.Metric) > 256 {
         glog.Infof("Metric name too long from %v: \"%v\"", c.RemoteAddr(), len(m.Metric))
         r.counters.inc_invalid(1)
-        c.Write([]byte("ERROR: Metric name is too long\n"))
+        c.Write([]byte("put: Metric name is too long\n"))
         return
     }
 
@@ -222,7 +222,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     if err != nil {
         glog.Infof("Invalid timestamp in PUT from %v: \"%v\"", c.RemoteAddr(), fields[2])
         r.counters.inc_invalid(1)
-        c.Write([]byte("ERROR: Invalid timestamp\n"))
+        c.Write([]byte("put: Invalid timestamp\n"))
         return
     }
 
@@ -230,7 +230,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     if err != nil {
         glog.Infof("Invalid value in PUT from %v: \"%v\"", c.RemoteAddr(), fields[3])
         r.counters.inc_invalid(1)
-        c.Write([]byte("ERROR: Invalid value. Expected float.\n"))
+        c.Write([]byte("put: Invalid value. Expected float.\n"))
         return
     }
 
@@ -243,7 +243,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
         } else {
             glog.Infof("Invalid tags from %v: \"%v\"", c.RemoteAddr(), tags[x])
             r.counters.inc_invalid(1)
-            c.Write([]byte("ERROR: Invalid tags\n"))
+            c.Write([]byte("put: Invalid tags\n"))
             return
         }
     }
