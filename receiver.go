@@ -137,6 +137,10 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     io.WriteString(w, "Thanks for the metrics.\n")
 }
 
+func (r *Receiver) HandleHttpVersion(w http.ResponseWriter, req *http.Request) {
+    io.WriteString(w, `{"short_revision":"","repo":"","host":"", "version":"2.3.0", "full_revision": "", "repo_status":"MODIFIED", "user":"root", "branch":"", "timestamp":"1526337710"}`)
+}
+
 func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
     s := bufio.NewScanner(reader)
 
@@ -282,6 +286,7 @@ func (r *Receiver) server(done chan bool, counters *Counters) {
     fakeListener.myaddr = ln.Addr()
 
     http.HandleFunc("/api/put", r.HandleHttpPut)
+    http.HandleFunc("/api/version", r.HandleHttpVersion)
 
     go http.Serve(fakeListener, nil)
 
