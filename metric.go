@@ -22,6 +22,8 @@ func (m *Metric) isValid() (bool, string) {
         return false, "Timestamp is invalid"
     } else if len(m.Tags) > 8 {
         return false, "Too any tags"
+    } else if len(m.Tags) == 0 {
+        return false, "No tags"
     }
 
     return true, ""
