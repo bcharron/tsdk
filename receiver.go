@@ -253,9 +253,9 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
         metrics[0] = m
         // r.recvq <- m
         r.recvq <- metrics
-        c.Write([]byte("ok\n"))
     } else {
         c.Write([]byte(err))
+        c.Write([]byte("\n"))
     }
 }
 
