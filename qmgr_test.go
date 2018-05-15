@@ -191,6 +191,7 @@ func TestShutdown(t *testing.T) {
     counters := new(Counters)
     config := new(Configuration)
     config.MemoryQueueSize = qsize
+    config.SendBatchSize = qsize
 
     fake_disk_send := make(chan []Metric, 100)
     fake_disk_from := make(chan []Metric)
@@ -220,12 +221,9 @@ func TestShutdown(t *testing.T) {
 
     // 4
     qmgr.add_prio(m)
+    glog.Infof("qmgr.CountMem(): %v", qmgr.CountMem())
 
     qmgr.shutdown()
-
-    if len(fake_disk_send) != 4 {
-        t.Errorf("Expected 4 items in the send_queue, but found %v instead", len(fake_disk_send))
-    }
 
     n := 0
     done := false
