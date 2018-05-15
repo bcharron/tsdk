@@ -297,11 +297,11 @@ func TestTake(t *testing.T) {
 }
 
 func BenchmarkMem(b *testing.B) {
-    qsize := 10
+    qsize := 1000
 
     counters := new(Counters)
     config := new(Configuration)
-    config.MemoryQueueSize = qsize
+    config.MemoryQueueSize = qsize * 10
 
     // fake_disk_send := make(chan []Metric, 100)
     // fake_disk_from := make(chan []Metric)
@@ -320,6 +320,9 @@ func BenchmarkMem(b *testing.B) {
     //b.ResetTimer()
 
     for i := 0; i < b.N; i++ {
+        qmgr.add(metrics, false)
+        qmgr.add(metrics, false)
+        qmgr.add(metrics, false)
         qmgr.add(metrics, false)
         b.StopTimer()
         qmgr.ClearMemQueue()
