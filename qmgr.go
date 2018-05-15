@@ -75,10 +75,8 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
     }
 
     if n > 0 {
-        glog.Infof("Queue size before: %v", len(q.memq))
         b.metrics = append(b.metrics, q.memq[:n]...)
         q.memq = q.memq[n:]
-        glog.Infof("Queue size after : %v", len(q.memq))
     }
 
     if len(b.metrics) > 0 {
