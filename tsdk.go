@@ -151,4 +151,5 @@ func main() {
     <-shutdown_dqmgr
 
     glog.Infof("main: All routines finished. Exiting.")
+    glog.Flush()
 }
