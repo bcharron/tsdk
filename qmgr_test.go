@@ -317,6 +317,7 @@ func BenchmarkMem(b *testing.B) {
     }
 }
 
+/*
 func BenchmarkValueArray(b *testing.B) {
     qsize := 10000
     array := make([]Metric, qsize, qsize)
@@ -340,3 +341,4 @@ func BenchmarkPointerArray(b *testing.B) {
         array[i % qsize] = m
     }
 }
+*/
