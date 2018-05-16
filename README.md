@@ -31,7 +31,7 @@ Create a file called `config.json` in the current directory:
         "Topic": "tsdb_test",
         "MemoryQueueSize": 75000,
         "ReceiveBuffer": 10000,
-        "FlushPeriod": 5,
+        "FlushPeriodMS": 5000,
         "Senders": 5,
         "SendBatchSize": 1000,
         "DiskBatchSize": 1000,
@@ -51,7 +51,7 @@ Create a file called `config.json` in the current directory:
   Kafka batch size.
 - DiskBatchSize is how many metrics to batch together when writing to disk. If
   it's too low, the disk becomes a bottleneck.
-- FlushPeriod: If there are less than `SendBatchSize` in the queue, wait
-  `FlushPeriod` seconds before sending the queued metrics to Kafka.
+- FlushPeriodMS: If there are less than `SendBatchSize` in the queue, wait
+  `FlushPeriodMS` milliseconds before sending the queued metrics to Kafka.
 
 Author: Benjamin Charron <bcharron@pobox.com>
