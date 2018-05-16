@@ -16,7 +16,7 @@ import(
 )
 
 type Receiver struct {
-    recvq chan []Metric
+    recvq chan []*Metric
     counters *Counters
 }
 
@@ -120,10 +120,10 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     glog.V(3).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
 
     errors := make([]string, 0)
-    valid_metrics := make([]Metric, 0, len(metrics))
+    valid_metrics := make([]*Metric, 0, len(metrics))
     for _, m := range metrics {
         if ok, errmsg := m.isValid(); ok {
-            valid_metrics = append(valid_metrics, m)
+            valid_metrics = append(valid_metrics, &m)
         } else {
             glog.V(3).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
             errmsg2 := fmt.Sprintf("%v: %v", m.Metric, errmsg)
@@ -249,9 +249,8 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     }
 
     if ok, err := m.isValid(); ok {
-        metrics := make([]Metric, 1, 1)
-        metrics[0] = m
-        // r.recvq <- m
+        metrics := make([]*Metric, 1, 1)
+        metrics[0] = &m
         r.recvq <- metrics
     } else {
         c.Write([]byte(err))

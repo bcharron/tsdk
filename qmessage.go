@@ -1,7 +1,7 @@
 package main;
 
 type Batch struct {
-    metrics []Metric
+    metrics []*Metric
 }
 
 type QMessage struct {

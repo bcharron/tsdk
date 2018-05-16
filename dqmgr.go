@@ -10,11 +10,11 @@ import(
 type DiskQueueManager struct {
     // buffer of metrics that will be sent to disk soon
     diskbuf []Metric
-    tosend []Metric
+    tosend []*Metric
 
     // Receive from memq, send to memq
-    recvq chan []Metric
-    sendq chan []Metric
+    recvq chan []*Metric
+    sendq chan []*Metric
 
     batch_size int
 
@@ -24,14 +24,14 @@ type DiskQueueManager struct {
     done chan bool
 }
 
-func (q *DiskQueueManager) Init(dir string, recvq chan []Metric, sendq chan []Metric, done chan bool, counters *Counters) (bool, error) {
+func (q *DiskQueueManager) Init(dir string, recvq chan []*Metric, sendq chan []*Metric, done chan bool, counters *Counters) (bool, error) {
     var err error
 
     q.recvq = recvq
     q.sendq = sendq
     q.batch_size = configuration.DiskBatchSize
     q.diskbuf = make([]Metric, 0, q.batch_size)
-    q.tosend = make([]Metric, 0, q.batch_size)
+    q.tosend = make([]*Metric, 0, q.batch_size)
     q.done = done
 
     q.diskq, err = goque.OpenQueue(dir)
@@ -49,9 +49,9 @@ func (q *DiskQueueManager) Count() int {
     return(int(q.diskq.Length()) * q.batch_size + len(q.diskbuf) + len(q.tosend))
 }
 
-func (q *DiskQueueManager) queue_to_disk(metrics []Metric, force bool) error {
+func (q *DiskQueueManager) queue_to_disk(metrics []*Metric, force bool) error {
     for _, metric := range metrics {
-        q.diskbuf = append(q.diskbuf, metric)
+        q.diskbuf = append(q.diskbuf, *metric)
 
         if len(q.diskbuf) >= q.batch_size {
             if err := q.flush_disk(force); err != nil {
@@ -101,7 +101,7 @@ func (q *DiskQueueManager) dequeue_from_disk() bool {
 
     for _, metric := range metrics {
         // q.add_mem(metric)
-        q.tosend = append(q.tosend, metric)
+        q.tosend = append(q.tosend, &metric)
     }
 
     return true
@@ -118,7 +118,10 @@ func (q *DiskQueueManager) shutdown() {
 
     // Flush "tosend" (items pending to be sent back to memq)
     glog.Infof("dqmgr: Flushing tosend")
-    q.diskbuf = q.tosend
+    for _, metric := range q.tosend {
+        q.diskbuf = append(q.diskbuf, *metric)
+    }
+    q.flush_disk(true)
 
     done := false
 
@@ -143,7 +146,7 @@ func (q *DiskQueueManager) shutdown() {
 }
 
 func (q *DiskQueueManager) diskQueueManager() {
-    var sendq chan []Metric
+    var sendq chan []*Metric
     alive := true
 
     for alive {
@@ -164,7 +167,7 @@ func (q *DiskQueueManager) diskQueueManager() {
 
             case sendq <- q.tosend:
                 glog.V(3).Infof("dqmgr: Sent %v metrics back to memq", len(q.tosend))
-                q.tosend = make([]Metric, 0, q.batch_size)
+                q.tosend = make([]*Metric, 0, q.batch_size)
 
             case <-q.done:
                 glog.Infof("dqmgr: Received shutdown request.")

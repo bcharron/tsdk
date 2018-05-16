@@ -7,10 +7,10 @@ import(
 
 type QueueManager struct {
     // Main queue for metrics, in memory
-    memq []Metric
+    memq []*Metric
 
     // Priority queue for tsdk's own metrics
-    prioq []Metric
+    prioq []*Metric
 
     trx map[string]Batch
 
@@ -30,16 +30,16 @@ type QueueManager struct {
 
     dqm *DiskQueueManager
 
-    from_disk chan []Metric
-    to_disk chan []Metric
+    from_disk chan []*Metric
+    to_disk chan []*Metric
 }
 
-func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_disk chan []Metric, counters *Counters) {
+func (q *QueueManager) Init(config *Configuration, to_disk chan []*Metric, from_disk chan []*Metric, counters *Counters) {
     q.batch_size = config.SendBatchSize
     q.requests_queue = make ([]QMessage, 0, 100)
     q.max = config.MemoryQueueSize
-    q.memq = make([]Metric, 0, q.max)
-    q.prioq = make([]Metric, 0, 1000)
+    q.memq = make([]*Metric, 0, q.max)
+    q.prioq = make([]*Metric, 0, 1000)
     q.trx = make(map[string]Batch)
     q.from_disk = from_disk
     q.to_disk = to_disk
@@ -48,7 +48,7 @@ func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_d
 }
 
 func (q *QueueManager) ClearMemQueue() {
-    q.memq = make([]Metric, 0, q.max)
+    q.memq = make([]*Metric, 0, q.max)
 }
 
 // Take up to 'n' metrics from the queue, and starts a transaction.
@@ -60,7 +60,7 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
         n = qsize
     }
 
-    b.metrics = make([]Metric, 0, n)
+    b.metrics = make([]*Metric, 0, n)
 
     // Take metrics from the priority queue, if any
     if len(q.prioq) > 0 {
@@ -80,6 +80,14 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
 
     if n > 0 {
         b.metrics = append(b.metrics, q.memq[:n]...)
+
+/*
+        // allow GC to collect from underlying array
+        for x := 0; x < n; x++ {
+            q.memq[x] = nil
+        }
+*/
+
         q.memq = q.memq[n:]
     }
 
@@ -100,16 +108,16 @@ func (q *QueueManager) CountMem() int {
     return(x)
 }
 
-func (q *QueueManager) add_mem(metric Metric) {
+func (q *QueueManager) add_mem(metric *Metric) {
     q.memq = append(q.memq, metric)
 }
 
-func (q *QueueManager) add_prio(metric Metric) {
+func (q *QueueManager) add_prio(metric *Metric) {
     q.prioq = append(q.prioq, metric)
 }
 
-func (q *QueueManager) add(metrics []Metric, force bool) {
-    overflow := make([]Metric, 0, len(metrics))
+func (q *QueueManager) add(metrics []*Metric, force bool) {
+    overflow := make([]*Metric, 0, len(metrics))
 
     for _, metric := range metrics {
         if q.CountMem() < q.max || force {
@@ -123,7 +131,7 @@ func (q *QueueManager) add(metrics []Metric, force bool) {
     q.send_to_disk(overflow, false)
 }
 
-func (q *QueueManager) send_to_disk(metrics []Metric, wait bool) {
+func (q *QueueManager) send_to_disk(metrics []*Metric, wait bool) {
     if len(metrics) > 0 {
         if wait {
             glog.Infof("qmgr: Trying to flush %v metrics to disk..", len(metrics))
@@ -176,10 +184,10 @@ func (q *QueueManager) commit(name string) {
 
 // Takes incoming metrics from recvq, queue them in memory or disk, and offer
 // them to sendq.
-func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr chan QMessage, done chan bool) {
-    var metrics []Metric
+func (q *QueueManager) queueManager(recvq chan []*Metric, prioc chan *Metric, qmgr chan QMessage, done chan bool) {
+    var metrics []*Metric
     var b Batch
-    var from_diskq chan []Metric
+    var from_diskq chan []*Metric
 
     timer := time.After(q.flush_period_ms)
 

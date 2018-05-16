@@ -21,7 +21,7 @@ var configuration *Configuration
 
 var live_senders int32 = 0
 
-func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
+func sendStats(recvq chan []*Metric, prioq chan *Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
     for {
         now := uint64(time.Now().Unix())
 
@@ -39,14 +39,14 @@ func sendStats(recvq chan []Metric, prioq chan Metric, qmgr *QueueManager, dqmgr
         metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
 
         for _, metric := range metrics {
-            prioq <- metric
+            prioq <- &metric
         }
 
         <-time.After(time.Second)
     }
 }
 
-func showStats(recvq chan []Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
+func showStats(recvq chan []*Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
     var last_received uint64
     var last_sent uint64
 
@@ -81,8 +81,8 @@ func main() {
 
     glog.Info("Starting")
 
-    disk_enqueue := make(chan []Metric, 100)
-    disk_dequeue := make(chan []Metric)
+    disk_enqueue := make(chan []*Metric, 100)
+    disk_dequeue := make(chan []*Metric)
 
     shutdown_qmgr := make(chan bool)
     qmgr := new(QueueManager)
@@ -94,8 +94,8 @@ func main() {
 
     nb_senders := 5
 
-    recvq := make(chan []Metric, configuration.ReceiveBuffer)
-    prioq := make(chan Metric, 1000)
+    recvq := make(chan []*Metric, configuration.ReceiveBuffer)
+    prioq := make(chan *Metric, 1000)
 
     var r Receiver
     r.recvq = recvq

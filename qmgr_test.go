@@ -21,7 +21,7 @@ func TestCommit(t *testing.T) {
     }
 
     for x := 0; x < qsize; x++ {
-        qmgr.add_mem(m)
+        qmgr.add_mem(&m)
     }
 
     // Test commit
@@ -58,7 +58,7 @@ func TestRollback(t *testing.T) {
     }
 
     for x := 0; x < qsize; x++ {
-        qmgr.add_mem(m)
+        qmgr.add_mem(&m)
     }
 
     b := qmgr.take(100, "trx1")
@@ -92,7 +92,7 @@ func TestInternalQueue(t *testing.T) {
         t.Error("Expected 0 metric in memq, got", count)
     }
 
-    qmgr.add_mem(m)
+    qmgr.add_mem(&m)
 
     count = qmgr.CountMem()
     if count != 1 {
@@ -102,10 +102,10 @@ func TestInternalQueue(t *testing.T) {
     qmgr.take(10, "trx1")
     qmgr.commit("trx1")
 
-    metrics := make([]Metric, 0, qsize)
+    metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
-        metrics = append(metrics, m)
+        metrics = append(metrics, &m)
     }
 
     qmgr.add(metrics, false)
@@ -121,16 +121,16 @@ func TestQueueDiscard(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []Metric)
-    fake_disk_from := make(chan []Metric)
+    fake_disk_send := make(chan []*Metric)
+    fake_disk_from := make(chan []*Metric)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
-    metrics := make([]Metric, 0, qsize)
+    metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
-        metrics = append(metrics, m)
+        metrics = append(metrics, &m)
     }
 
     qmgr.add(metrics, false)
@@ -155,17 +155,17 @@ func TestQueueSendDisk(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []Metric, 100)
-    fake_disk_from := make(chan []Metric)
+    fake_disk_send := make(chan []*Metric, 100)
+    fake_disk_from := make(chan []*Metric)
 
     counters := new(Counters)
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
-    metrics := make([]Metric, 0, qsize)
+    metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
-        metrics = append(metrics, m)
+        metrics = append(metrics, &m)
     }
 
     // fill-up the queue
@@ -193,17 +193,17 @@ func TestShutdown(t *testing.T) {
     config.MemoryQueueSize = qsize
     config.SendBatchSize = qsize
 
-    fake_disk_send := make(chan []Metric, 100)
-    fake_disk_from := make(chan []Metric)
+    fake_disk_send := make(chan []*Metric, 100)
+    fake_disk_from := make(chan []*Metric)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
-    metrics := make([]Metric, 0, qsize)
+    metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
-        metrics = append(metrics, m)
+        metrics = append(metrics, &m)
         val += x
     }
 
@@ -220,14 +220,14 @@ func TestShutdown(t *testing.T) {
     val += int(m.Timestamp)
 
     // 4
-    qmgr.add_prio(m)
+    qmgr.add_prio(&m)
     glog.Infof("qmgr.CountMem(): %v", qmgr.CountMem())
 
     qmgr.shutdown()
 
     n := 0
     done := false
-    received := make([]Metric, 0, qsize + 1)
+    received := make([]*Metric, 0, qsize + 1)
 
     for !done {
         select {
@@ -262,17 +262,17 @@ func TestTake(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []Metric, 100)
-    fake_disk_from := make(chan []Metric)
+    fake_disk_send := make(chan []*Metric, 100)
+    fake_disk_from := make(chan []*Metric)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
-    metrics := make([]Metric, 0, qsize)
+    metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
-        metrics = append(metrics, m)
+        metrics = append(metrics, &m)
         val += x
     }
 
@@ -281,7 +281,7 @@ func TestTake(t *testing.T) {
     m := Metric{Metric:"fake", Timestamp:99, Value:0.0, Tags:nil}
     val += int(m.Timestamp)
 
-    qmgr.add_prio(m)
+    qmgr.add_prio(&m)
 
     if qmgr.CountMem() != qsize + 1 {
         t.Errorf("Expected CountMem to be %v but got %v", qsize + 1, qmgr.CountMem())
@@ -301,32 +301,42 @@ func BenchmarkMem(b *testing.B) {
 
     counters := new(Counters)
     config := new(Configuration)
-    config.MemoryQueueSize = qsize * 10
-
-    // fake_disk_send := make(chan []Metric, 100)
-    // fake_disk_from := make(chan []Metric)
+    config.MemoryQueueSize = qsize * 1000
 
     qmgr := new(QueueManager)
     qmgr.Init(config, nil, nil, counters)
 
-    val := 0
-    metrics := make([]Metric, 0, qsize)
-    for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
-        metrics = append(metrics, m)
-        val += x
-    }
+    metrics := make([]*Metric, 0, 1)
+    m := Metric{Metric:"fake", Timestamp:uint64(0), Value:0.0, Tags:nil}
+    metrics = append(metrics, &m)
 
-    //b.ResetTimer()
+    b.ResetTimer()
 
     for i := 0; i < b.N; i++ {
         qmgr.add(metrics, false)
-        qmgr.add(metrics, false)
-        qmgr.add(metrics, false)
-        qmgr.add(metrics, false)
-        b.StopTimer()
-        qmgr.ClearMemQueue()
-        b.StartTimer()
     }
 }
 
+func BenchmarkValueArray(b *testing.B) {
+    qsize := 10000
+    array := make([]Metric, qsize, qsize)
+    m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+
+    b.ResetTimer()
+
+    for i := 0; i < b.N; i++ {
+        array[i % qsize] = m
+    }
+}
+
+func BenchmarkPointerArray(b *testing.B) {
+    qsize := 10000
+    array := make([]*Metric, qsize, qsize)
+    m := &Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+
+    b.ResetTimer()
+
+    for i := 0; i < b.N; i++ {
+        array[i % qsize] = m
+    }
+}
