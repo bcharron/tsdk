@@ -194,7 +194,7 @@ func (q *QueueManager) queueManager(recvq chan []*Metric, prioc chan *Metric, qm
     alive := true
     for alive {
         // Load messages from disk if memq is at 33% or less
-        if len(q.memq) <= cap(q.memq) / 3 {
+        if len(q.memq) <= q.max / 3 {
             from_diskq = q.from_disk
         } else {
             from_diskq = nil
