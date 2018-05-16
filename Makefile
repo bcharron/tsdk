@@ -6,6 +6,9 @@ tsdk: $(src)
 	go build $(src)
 
 run: tsdk
+	./tsdk -logtostderr=true -v=2
+
+vrun: tsdk
 	./tsdk -logtostderr=true -v=5
 
 clean:
@@ -16,3 +19,6 @@ test:
 
 vtest:
 	go test -v -args -logtostderr=true -v=5
+
+bench:
+	go test -bench=. -benchmem

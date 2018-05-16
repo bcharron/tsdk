@@ -20,6 +20,9 @@ type QueueManager struct {
     // Number of metrics to send at once
     batch_size int
 
+    // How often to flush queues with less than batch_size metrics
+    flush_period_ms time.Duration
+
     // Senders waiting for batches
     requests_queue []QMessage
 
@@ -41,6 +44,7 @@ func (q *QueueManager) Init(config *Configuration, to_disk chan []Metric, from_d
     q.from_disk = from_disk
     q.to_disk = to_disk
     q.counters = counters
+    q.flush_period_ms = time.Duration(config.FlushPeriodMS) * time.Millisecond
 }
 
 func (q *QueueManager) ClearMemQueue() {
@@ -177,8 +181,7 @@ func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr
     var b Batch
     var from_diskq chan []Metric
 
-    // timer := time.After(time.Second * configuration.FlushFrequency)
-    timer := time.After(time.Second * 5)
+    timer := time.After(q.flush_period_ms)
 
     alive := true
     for alive {
@@ -233,8 +236,7 @@ func (q *QueueManager) queueManager(recvq chan []Metric, prioc chan Metric, qmgr
                 for len(q.requests_queue) > 0 && len(q.memq) + len(q.prioq) > 0 {
                     q.dispatch()
                 }
-                // timer = time.After(time.Second * configuration.FlushPeriod)
-                timer = time.After(time.Second * 5)
+                timer = time.After(q.flush_period_ms)
                 glog.V(4).Infof("qmgr: Done flushing timed memq.")
 
             case <-done:

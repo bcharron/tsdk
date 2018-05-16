@@ -12,7 +12,7 @@ type Configuration struct {
     Topic string
     ReceiveBuffer int
     MemoryQueueSize int
-    FlushPeriod int
+    FlushPeriodMS int
     Senders int
     SendBatchSize int
     DiskBatchSize int
@@ -26,7 +26,7 @@ func (c *Configuration) loadDefaults() {
     c.Topic = "tsdb"
     c.ReceiveBuffer = 10000
     c.MemoryQueueSize = 100000
-    c.FlushPeriod = 5
+    c.FlushPeriodMS = 5000
     c.Senders = 5
     c.SendBatchSize = 1000
     c.DiskBatchSize = 1000

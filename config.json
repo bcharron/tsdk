@@ -4,7 +4,7 @@
     "Topic": "tsdb_test",
     "MemoryQueueSize": 75000,
     "ReceiveBuffer": 10000,
-    "FlushPeriod": 5,
+    "FlushPeriodMS": 5000,
     "Senders": 5,
     "SendBatchSize": 1000,
     "DiskBatchSize": 1000,
