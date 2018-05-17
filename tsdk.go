@@ -68,9 +68,10 @@ func showStats(recvq chan []*Metric, qmgr *QueueManager, dqmgr *DiskQueueManager
 
 
 func main() {
+    config_filename := flag.String("c", "config.json", "Path to the config JSON file")
     flag.Parse()
 
-    configuration = loadConfig("config.json")
+    configuration = loadConfig(*config_filename)
     counters := new(Counters)
 
     glog.Infof("Brokers: %v", configuration.Brokers)
@@ -125,8 +126,10 @@ func main() {
 
     // XXX: Handle senders dying
 
-    sig := <-c
-    glog.Infof("main: Received signal: %v", sig)
+    select {
+        case sig := <-c:
+            glog.Infof("main: Received signal: %v", sig)
+    }
 
     shutdown_server <- true
 

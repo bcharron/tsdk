@@ -6,7 +6,7 @@ tsdk: $(src)
 	go build $(src)
 
 run: tsdk
-	./tsdk -logtostderr=true -v=2
+	./tsdk -logtostderr=true -v=2 -c config.json
 
 vrun: tsdk
 	./tsdk -logtostderr=true -v=5
