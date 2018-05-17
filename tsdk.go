@@ -66,6 +66,11 @@ func showStats(recvq chan []*Metric, qmgr *QueueManager, dqmgr *DiskQueueManager
     }
 }
 
+func waitForSenders(wg *sync.WaitGroup, done chan bool) {
+    wg.Wait()
+    done <- true
+}
+
 
 func main() {
     config_filename := flag.String("c", "config.json", "Path to the config JSON file")
@@ -124,11 +129,21 @@ func main() {
     c := make(chan os.Signal, 2)
     signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-    // XXX: Handle senders dying
+    senders_done := make(chan bool)
+    go waitForSenders(senders_wg, senders_done)
 
-    select {
-        case sig := <-c:
-            glog.Infof("main: Received signal: %v", sig)
+    done := false
+
+    for !done {
+        select {
+            case sig := <-c:
+                glog.Infof("main: Received signal: %v", sig)
+                done = true
+
+            case <-senders_done:
+                glog.Errorf("main: All senders are dead?!? Terminating!")
+                done = true
+        }
     }
 
     shutdown_server <- true
