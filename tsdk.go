@@ -38,8 +38,8 @@ func sendStats(recvq chan []*Metric, prioq chan *Metric, qmgr *QueueManager, dqm
         metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
 
-        for _, metric := range metrics {
-            prioq <- &metric
+        for idx, _ := range metrics {
+            prioq <- &metrics[idx]
         }
 
         <-time.After(time.Second)

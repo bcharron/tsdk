@@ -99,9 +99,9 @@ func (q *DiskQueueManager) dequeue_from_disk() bool {
 
     glog.V(4).Infof("Decoded %v metrics from disk", len(metrics))
 
-    for _, metric := range metrics {
+    for idx, _ := range metrics {
         // q.add_mem(metric)
-        q.tosend = append(q.tosend, &metric)
+        q.tosend = append(q.tosend, &metrics[idx])
     }
 
     return true

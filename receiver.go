@@ -121,9 +121,10 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
 
     errors := make([]string, 0)
     valid_metrics := make([]*Metric, 0, len(metrics))
-    for _, m := range metrics {
+    for idx, _ := range metrics {
+        m := &metrics[idx]
         if ok, errmsg := m.isValid(); ok {
-            valid_metrics = append(valid_metrics, &m)
+            valid_metrics = append(valid_metrics, m)
         } else {
             glog.V(3).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
             errmsg2 := fmt.Sprintf("%v: %v", m.Metric, errmsg)
