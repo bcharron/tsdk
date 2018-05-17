@@ -22,21 +22,24 @@ type DiskQueueManager struct {
     diskq *goque.Queue
 
     done chan bool
+
+    config *Configuration
 }
 
-func (q *DiskQueueManager) Init(dir string, recvq chan []*Metric, sendq chan []*Metric, done chan bool, counters *Counters) (bool, error) {
+func (q *DiskQueueManager) Init(config *Configuration, recvq chan []*Metric, sendq chan []*Metric, done chan bool, counters *Counters) (bool, error) {
     var err error
 
+    q.config = config
     q.recvq = recvq
     q.sendq = sendq
-    q.batch_size = configuration.DiskBatchSize
+    q.batch_size = q.config.DiskBatchSize
     q.diskbuf = make([]Metric, 0, q.batch_size)
     q.tosend = make([]*Metric, 0, q.batch_size)
     q.done = done
 
-    q.diskq, err = goque.OpenQueue(dir)
+    q.diskq, err = goque.OpenQueue(q.config.DiskQueuePath)
     if err != nil {
-        glog.Fatalf("Error trying to open %s: %v", dir, err)
+        glog.Fatalf("Error trying to open %s: %v", q.config.DiskQueuePath, err)
         return false, err
     }
 
@@ -140,6 +143,7 @@ func (q *DiskQueueManager) shutdown() {
     glog.Infof("dqmgr: Flushing last metrics to disk")
     q.flush_disk(true)
 
+    q.diskq.Close()
     glog.Infof("dqmgr: Done.")
 
     q.done <- true
