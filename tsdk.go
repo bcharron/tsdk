@@ -103,11 +103,11 @@ func main() {
     recvq := make(chan []*Metric, configuration.ReceiveBuffer)
     prioq := make(chan *Metric, 1000)
 
-    var r Receiver
-    r.recvq = recvq
+    r := new(Receiver)
+    r.Init(recvq, counters)
 
     shutdown_server := make(chan bool, 1)
-    go r.server(shutdown_server, counters)
+    go r.server(shutdown_server)
     go showStats(recvq, qmgr, dqmgr, counters)
     go sendStats(recvq, prioq, qmgr, dqmgr, counters)
 

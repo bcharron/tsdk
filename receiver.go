@@ -20,6 +20,11 @@ type Receiver struct {
     counters *Counters
 }
 
+func (r *Receiver) Init(recvq chan []*Metric, counters *Counters) {
+    r.recvq = recvq
+    r.counters = counters
+}
+
 func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     var err error
     var ok bool
@@ -293,9 +298,7 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
     }
 }
 
-func (r *Receiver) server(done chan bool, counters *Counters) {
-    r.counters = counters
-
+func (r *Receiver) server(done chan bool) {
     ln, err := net.Listen("tcp", configuration.ListenAddr)
     if err != nil {
         panic(err)
