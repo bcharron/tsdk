@@ -171,7 +171,7 @@ func (q *DiskQueueManager) diskQueueManager() {
     go updateDiskUsage(q.config.DiskQueuePath, duChannel)
 
     for alive {
-        if q.diskq.Length() > 0 {
+        if q.diskq.Length() > 0 || len(q.tosend) > 0 {
             if len(q.tosend) == 0 {
                 q.dequeue_from_disk()
             }
