@@ -96,7 +96,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     }
 
     if !ok {
-        // c.Write([]byte("Not JSON"))
+        io.WriteString(w, "That was not JSON.\n")
         glog.Warningf("httphandler: Body received from %v doesn't look like JSON.", req.RemoteAddr)
         w.WriteHeader(http.StatusBadRequest)
         r.counters.inc_invalid(1)

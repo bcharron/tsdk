@@ -5,6 +5,9 @@ import(
     "encoding/gob"
     "github.com/beeker1121/goque"
     "github.com/golang/glog"
+    "os"
+    "path"
+    "time"
 )
 
 type DiskQueueManager struct {
@@ -16,10 +19,15 @@ type DiskQueueManager struct {
     recvq chan []*Metric
     sendq chan []*Metric
 
+    // How much disk space is being used
+    diskUsage int64
+
     batch_size int
 
     // metrics queued on disk
     diskq *goque.Queue
+
+    counters *Counters
 
     done chan bool
 
@@ -36,6 +44,7 @@ func (q *DiskQueueManager) Init(config *Configuration, recvq chan []*Metric, sen
     q.diskbuf = make([]Metric, 0, q.batch_size)
     q.tosend = make([]*Metric, 0, q.batch_size)
     q.done = done
+    q.counters = counters
 
     q.diskq, err = goque.OpenQueue(q.config.DiskQueuePath)
     if err != nil {
@@ -50,6 +59,10 @@ func (q *DiskQueueManager) Init(config *Configuration, recvq chan []*Metric, sen
 
 func (q *DiskQueueManager) Count() int {
     return(int(q.diskq.Length()) * q.batch_size + len(q.diskbuf) + len(q.tosend))
+}
+
+func (q *DiskQueueManager) GetDiskUsage() int64 {
+    return(q.diskUsage)
 }
 
 func (q *DiskQueueManager) queue_to_disk(metrics []*Metric, force bool) error {
@@ -152,6 +165,10 @@ func (q *DiskQueueManager) shutdown() {
 func (q *DiskQueueManager) diskQueueManager() {
     var sendq chan []*Metric
     alive := true
+    acceptingMetrics := true
+    duChannel := make(chan int64)
+
+    go updateDiskUsage(q.config.DiskQueuePath, duChannel)
 
     for alive {
         if q.diskq.Length() > 0 {
@@ -167,11 +184,25 @@ func (q *DiskQueueManager) diskQueueManager() {
         select {
             case metrics := <-q.recvq:
                 glog.V(3).Infof("dqmgr: Received %v metrics", len(metrics))
-                q.queue_to_disk(metrics, true)
+                if acceptingMetrics {
+                    q.queue_to_disk(metrics, true)
+                } else {
+                    glog.Warningf("dqmgr: Dropping metrics")
+                    q.counters.inc_droppedDiskFull(uint64(len(metrics)))
+                }
 
             case sendq <- q.tosend:
                 glog.V(3).Infof("dqmgr: Sent %v metrics back to memq", len(q.tosend))
                 q.tosend = make([]*Metric, 0, q.batch_size)
+
+            case queueDiskUsage := <-duChannel:
+                q.diskUsage = queueDiskUsage
+                glog.V(3).Infof("dqmgr: Disk usage: %v bytes", q.diskUsage)
+                if queueDiskUsage < q.config.DiskMaxSize {
+                    acceptingMetrics = true
+                } else {
+                    acceptingMetrics = false
+                }
 
             case <-q.done:
                 glog.Infof("dqmgr: Received shutdown request.")
@@ -181,4 +212,46 @@ func (q *DiskQueueManager) diskQueueManager() {
     }
 
     q.shutdown()
+}
+
+func updateDiskUsage(dirPath string, c chan int64) {
+    for {
+        size := du(dirPath)
+        c <- size
+
+        // Check every 5 seconds
+        <-time.After(time.Second * 5)
+    }
+}
+
+// Recursively returns the number of bytes used by files in a directory.
+// The output may probably be different from the OS' own `du` because we don't
+// round to the nearest block size
+func du(dirPath string) int64 {
+    var total int64 = 0
+
+    dir, err := os.Open(dirPath)
+    if err != nil {
+        glog.Errorf("Unable to open %s to count disk space: %v", dirPath, err)
+        return(-1)
+    }
+
+    defer dir.Close()
+
+    files, err := dir.Readdir(0)
+    if err != nil {
+        glog.Errorf("Unable to open read files in %s: %v", dirPath, err)
+        return(-1)
+    }
+
+    for _, file := range files {
+        if file.IsDir() {
+            subPath := path.Join(dirPath, file.Name())
+            total += du(subPath)
+        } else {
+            total += file.Size()
+        }
+    }
+
+    return total
 }

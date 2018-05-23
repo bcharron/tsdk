@@ -1,12 +1,15 @@
 package main
 
-import "sync/atomic"
+import (
+    "sync/atomic"
+)
 
 type Counters struct {
     received uint64
     sent uint64
     early_dropped uint64    // Dropped because the recvq was full
     dropped uint64          // Dropped because memq was full and disk queue wasn't responding fast-enough
+    droppedDiskFull uint64  // Dropped because disk queue was full
     invalid uint64          // Malformed json, invalid metric name, missing tags, etc.
     http_errors uint64
 }
@@ -33,4 +36,8 @@ func (c *Counters) inc_dropped(delta uint64) {
 
 func (c *Counters) inc_invalid(delta uint64) {
     atomic.AddUint64(&c.invalid, delta)
+}
+
+func (c *Counters) inc_droppedDiskFull(delta uint64) {
+    atomic.AddUint64(&c.droppedDiskFull, delta)
 }

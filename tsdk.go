@@ -31,11 +31,13 @@ func sendStats(recvq chan []*Metric, prioq chan *Metric, qmgr *QueueManager, dqm
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(counters.received), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(counters.sent), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(counters.dropped), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped_disk_full", Value:float64(counters.droppedDiskFull), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.metrics.invalid", Value:float64(counters.invalid), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.http_errors", Value:float64(counters.http_errors), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, Metric{Metric:"tsdk.diskq.usage", Value:float64(dqmgr.GetDiskUsage()), Timestamp: now, Tags: configuration.Tags})
         metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
 
         for idx, _ := range metrics {
@@ -59,7 +61,7 @@ func showStats(recvq chan []*Metric, qmgr *QueueManager, dqmgr *DiskQueueManager
         diff_received := received - last_received
         diff_sent := sent - last_sent
 
-        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v/?  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, dqmgr.Count(), diff_received, diff_sent, counters.dropped, len(qmgr.requests_queue))
+        glog.Infof("stats: recvq: %v/%v  memq: %v/%v  diskq: %v  recv rate: %v/s  send rate: %v/s  drops: %v  idle senders: %v\n", len(recvq), cap(recvq), qmgr.CountMem(), qmgr.max, dqmgr.Count(), diff_received, diff_sent, counters.dropped + counters.droppedDiskFull, len(qmgr.requests_queue))
 
         last_received = received
         last_sent = sent
@@ -70,7 +72,6 @@ func waitForSenders(wg *sync.WaitGroup, done chan bool) {
     wg.Wait()
     done <- true
 }
-
 
 func main() {
     config_filename := flag.String("c", "config.json", "Path to the config JSON file")

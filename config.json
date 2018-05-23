@@ -9,6 +9,7 @@
     "SendBatchSize": 1000,
     "DiskBatchSize": 1000,
     "DiskQueuePath": "dirq",
+    "DiskMaxSize": 10000000000,
     "Tags": {
         "env": "prod"
     }
