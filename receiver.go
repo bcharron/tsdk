@@ -16,11 +16,11 @@ import(
 )
 
 type Receiver struct {
-    recvq chan []*Metric
+    recvq chan MetricList
     counters *Counters
 }
 
-func (r *Receiver) Init(recvq chan []*Metric, counters *Counters) {
+func (r *Receiver) Init(recvq chan MetricList, counters *Counters) {
     r.recvq = recvq
     r.counters = counters
 }
@@ -125,7 +125,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     glog.V(3).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
 
     errors := make([]string, 0)
-    valid_metrics := make([]*Metric, 0, len(metrics))
+    valid_metrics := make(MetricList, 0, len(metrics))
     for idx, _ := range metrics {
         m := &metrics[idx]
         if ok, errmsg := m.isValid(); ok {
@@ -256,7 +256,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     }
 
     if ok, err := m.isValid(); ok {
-        metrics := make([]*Metric, 1, 1)
+        metrics := make(MetricList, 1, 1)
         metrics[0] = &m
         r.recvq <- metrics
     } else {

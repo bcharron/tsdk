@@ -102,7 +102,7 @@ func TestInternalQueue(t *testing.T) {
     qmgr.take(10, "trx1")
     qmgr.commit("trx1")
 
-    metrics := make([]*Metric, 0, qsize)
+    metrics := make(MetricList, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
@@ -121,13 +121,13 @@ func TestQueueDiscard(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []*Metric)
-    fake_disk_from := make(chan []*Metric)
+    fake_disk_send := make(chan MetricList)
+    fake_disk_from := make(chan MetricList)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
-    metrics := make([]*Metric, 0, qsize)
+    metrics := make(MetricList, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
@@ -155,14 +155,14 @@ func TestQueueSendDisk(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []*Metric, 100)
-    fake_disk_from := make(chan []*Metric)
+    fake_disk_send := make(chan MetricList, 100)
+    fake_disk_from := make(chan MetricList)
 
     counters := new(Counters)
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
-    metrics := make([]*Metric, 0, qsize)
+    metrics := make(MetricList, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
@@ -193,14 +193,14 @@ func TestShutdown(t *testing.T) {
     config.MemoryQueueSize = qsize
     config.SendBatchSize = qsize
 
-    fake_disk_send := make(chan []*Metric, 100)
-    fake_disk_from := make(chan []*Metric)
+    fake_disk_send := make(chan MetricList, 100)
+    fake_disk_from := make(chan MetricList)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
-    metrics := make([]*Metric, 0, qsize)
+    metrics := make(MetricList, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:uint64(x), Value:"0", Tags:nil}
         metrics = append(metrics, &m)
@@ -227,7 +227,7 @@ func TestShutdown(t *testing.T) {
 
     n := 0
     done := false
-    received := make([]*Metric, 0, qsize + 1)
+    received := make(MetricList, 0, qsize + 1)
 
     for !done {
         select {
@@ -262,14 +262,14 @@ func TestTake(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    fake_disk_send := make(chan []*Metric, 100)
-    fake_disk_from := make(chan []*Metric)
+    fake_disk_send := make(chan MetricList, 100)
+    fake_disk_from := make(chan MetricList)
 
     qmgr := new(QueueManager)
     qmgr.Init(config, fake_disk_send, fake_disk_from, counters)
 
     val := 0
-    metrics := make([]*Metric, 0, qsize)
+    metrics := make(MetricList, 0, qsize)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:uint64(x), Value:"0", Tags:nil}
         metrics = append(metrics, &m)
@@ -306,7 +306,7 @@ func BenchmarkMem(b *testing.B) {
     qmgr := new(QueueManager)
     qmgr.Init(config, nil, nil, counters)
 
-    metrics := make([]*Metric, 0, 1)
+    metrics := make(MetricList, 0, 1)
     m := Metric{Metric:"fake", Timestamp:uint64(0), Value:"0", Tags:nil}
     metrics = append(metrics, &m)
 
@@ -332,7 +332,7 @@ func BenchmarkValueArray(b *testing.B) {
 
 func BenchmarkPointerArray(b *testing.B) {
     qsize := 10000
-    array := make([]*Metric, qsize, qsize)
+    array := make(MetricList, qsize, qsize)
     m := &Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
 
     b.ResetTimer()

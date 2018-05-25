@@ -13,8 +13,8 @@ func TestDiskIntegrity(t *testing.T) {
     config.DiskBatchSize = 10
     config.DiskQueuePath = "testq"
 
-    to_disk := make(chan []*Metric)
-    from_disk := make(chan []*Metric)
+    to_disk := make(chan MetricList)
+    from_disk := make(chan MetricList)
     done_channel := make(chan bool)
     counters := new(Counters)
 
@@ -25,7 +25,7 @@ func TestDiskIntegrity(t *testing.T) {
 
     glog.Infof("Queueing")
 
-    buf := make([]*Metric, 0)
+    buf := make(MetricList, 0)
     for x := 0; x < qsize; x++ {
         m := Metric{Metric:"fake", Timestamp:uint64(x), Value:json.Number(x), Tags:nil}
         buf = append(buf, &m)

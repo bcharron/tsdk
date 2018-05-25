@@ -13,11 +13,11 @@ import(
 type DiskQueueManager struct {
     // buffer of metrics that will be sent to disk soon
     diskbuf []Metric
-    tosend []*Metric
+    tosend MetricList
 
     // Receive from memq, send to memq
-    recvq chan []*Metric
-    sendq chan []*Metric
+    recvq chan MetricList
+    sendq chan MetricList
 
     // How much disk space is being used
     diskUsage int64
@@ -34,7 +34,7 @@ type DiskQueueManager struct {
     config *Configuration
 }
 
-func (q *DiskQueueManager) Init(config *Configuration, recvq chan []*Metric, sendq chan []*Metric, done chan bool, counters *Counters) (bool, error) {
+func (q *DiskQueueManager) Init(config *Configuration, recvq chan MetricList, sendq chan MetricList, done chan bool, counters *Counters) (bool, error) {
     var err error
 
     q.config = config
@@ -42,7 +42,7 @@ func (q *DiskQueueManager) Init(config *Configuration, recvq chan []*Metric, sen
     q.sendq = sendq
     q.batch_size = q.config.DiskBatchSize
     q.diskbuf = make([]Metric, 0, q.batch_size)
-    q.tosend = make([]*Metric, 0, q.batch_size)
+    q.tosend = make(MetricList, 0, q.batch_size)
     q.done = done
     q.counters = counters
 
@@ -65,7 +65,7 @@ func (q *DiskQueueManager) GetDiskUsage() int64 {
     return(q.diskUsage)
 }
 
-func (q *DiskQueueManager) queue_to_disk(metrics []*Metric, force bool) error {
+func (q *DiskQueueManager) queue_to_disk(metrics MetricList, force bool) error {
     for _, metric := range metrics {
         q.diskbuf = append(q.diskbuf, *metric)
 
@@ -163,7 +163,7 @@ func (q *DiskQueueManager) shutdown() {
 }
 
 func (q *DiskQueueManager) diskQueueManager() {
-    var sendq chan []*Metric
+    var sendq chan MetricList
     alive := true
     acceptingMetrics := true
     duChannel := make(chan int64)
@@ -193,7 +193,7 @@ func (q *DiskQueueManager) diskQueueManager() {
 
             case sendq <- q.tosend:
                 glog.V(3).Infof("dqmgr: Sent %v metrics back to memq", len(q.tosend))
-                q.tosend = make([]*Metric, 0, q.batch_size)
+                q.tosend = make(MetricList, 0, q.batch_size)
 
             case queueDiskUsage := <-duChannel:
                 q.diskUsage = queueDiskUsage

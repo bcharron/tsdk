@@ -9,7 +9,7 @@ import "strings"
 
 type TestData struct {
     config *Configuration
-    recvq chan []*Metric
+    recvq chan MetricList
     counters *Counters
     r *Receiver
 }
@@ -19,7 +19,7 @@ func (d *TestData) init () {
     d.config.DiskBatchSize = 10
     d.config.DiskQueuePath = "testq"
 
-    d.recvq = make(chan []*Metric, 1000)
+    d.recvq = make(chan MetricList, 1000)
     d.counters = new(Counters)
 
     d.r = new(Receiver)
