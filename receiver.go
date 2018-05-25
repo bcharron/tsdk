@@ -232,7 +232,8 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
         return
     }
 
-    m.Value, err = strconv.ParseFloat(fields[3], 64)
+    m.Value = json.Number(fields[3])
+    _, err = strconv.ParseFloat(fields[3], 64)
     if err != nil {
         glog.Infof("Invalid value in PUT from %v: \"%v\"", c.RemoteAddr(), fields[3])
         r.counters.inc_invalid(1)

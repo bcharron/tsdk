@@ -2,14 +2,17 @@ package main;
 
 import(
     "fmt"
+    "encoding/json"
 )
 
 type Metric struct {
 	Metric string `json:"metric"`
 	Timestamp uint64 `json:"timestamp"`
-        Value float64 `json:"value"`
+        Value json.Number `json:"value"`
 	Tags map[string]string `json:"tags"`
 }
+
+type MetricList []*Metric
 
 func (m *Metric) dump() {
     fmt.Printf("%+v\n", m)

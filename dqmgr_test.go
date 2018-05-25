@@ -1,5 +1,6 @@
 package main
 
+import "encoding/json"
 import "testing"
 import "github.com/golang/glog"
 
@@ -26,7 +27,7 @@ func TestDiskIntegrity(t *testing.T) {
 
     buf := make([]*Metric, 0)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:float64(x), Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:json.Number(x), Tags:nil}
         buf = append(buf, &m)
     }
 

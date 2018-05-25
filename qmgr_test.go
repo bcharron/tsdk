@@ -11,7 +11,7 @@ func TestCommit(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
 
     qmgr := new(QueueManager)
     qmgr.Init(config, nil, nil, counters)
@@ -48,7 +48,7 @@ func TestRollback(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
 
     qmgr := new(QueueManager)
     qmgr.Init(config, nil, nil, counters)
@@ -84,7 +84,7 @@ func TestInternalQueue(t *testing.T) {
     config := new(Configuration)
     config.MemoryQueueSize = qsize
 
-    m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
     qmgr := new(QueueManager)
     qmgr.Init(config, nil, nil, counters)
     count := qmgr.CountMem()
@@ -104,7 +104,7 @@ func TestInternalQueue(t *testing.T) {
 
     metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
     }
 
@@ -129,7 +129,7 @@ func TestQueueDiscard(t *testing.T) {
 
     metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
     }
 
@@ -164,7 +164,7 @@ func TestQueueSendDisk(t *testing.T) {
 
     metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:1, Value:9.0, Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:1, Value:"9", Tags:nil}
         metrics = append(metrics, &m)
     }
 
@@ -202,7 +202,7 @@ func TestShutdown(t *testing.T) {
     val := 0
     metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:"0", Tags:nil}
         metrics = append(metrics, &m)
         val += x
     }
@@ -216,7 +216,7 @@ func TestShutdown(t *testing.T) {
     // 3
     qmgr.take(2, "trx2")
 
-    m := Metric{Metric:"fake", Timestamp:99, Value:0.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:99, Value:"0", Tags:nil}
     val += int(m.Timestamp)
 
     // 4
@@ -271,14 +271,14 @@ func TestTake(t *testing.T) {
     val := 0
     metrics := make([]*Metric, 0, qsize)
     for x := 0; x < qsize; x++ {
-        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:0.0, Tags:nil}
+        m := Metric{Metric:"fake", Timestamp:uint64(x), Value:"0", Tags:nil}
         metrics = append(metrics, &m)
         val += x
     }
 
     qmgr.add(metrics, false)
 
-    m := Metric{Metric:"fake", Timestamp:99, Value:0.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:99, Value:"0", Tags:nil}
     val += int(m.Timestamp)
 
     qmgr.add_prio(&m)
@@ -307,7 +307,7 @@ func BenchmarkMem(b *testing.B) {
     qmgr.Init(config, nil, nil, counters)
 
     metrics := make([]*Metric, 0, 1)
-    m := Metric{Metric:"fake", Timestamp:uint64(0), Value:0.0, Tags:nil}
+    m := Metric{Metric:"fake", Timestamp:uint64(0), Value:"0", Tags:nil}
     metrics = append(metrics, &m)
 
     b.ResetTimer()

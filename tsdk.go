@@ -5,11 +5,13 @@
 package main
 
 import (
+    "encoding/json"
     "flag"
     "fmt"
     "github.com/golang/glog"
     "os"
     "os/signal"
+    "strconv"
     "syscall"
     "sync"
     "time"
@@ -21,24 +23,41 @@ var configuration *Configuration
 
 var live_senders int32 = 0
 
+func makeMetric(name string, value interface{}, t uint64) Metric {
+    var s string
+
+    switch value.(type) {
+        case int32: s = strconv.FormatInt(int64(value.(int32)), 10)
+        case int: s = strconv.FormatInt(int64(value.(int)), 10)
+        case int64: s = strconv.FormatInt(value.(int64), 10)
+        case uint64: s = strconv.FormatUint(value.(uint64), 10)
+    }
+
+    n := json.Number(s)
+
+    metric := Metric{Metric:name, Value:n, Timestamp: t, Tags: configuration.Tags}
+
+    return metric
+}
+
 func sendStats(recvq chan []*Metric, prioq chan *Metric, qmgr *QueueManager, dqmgr *DiskQueueManager, counters *Counters) {
     for {
         now := uint64(time.Now().Unix())
 
         metrics := make([]Metric, 0, 10)
-        metrics = append(metrics, Metric{Metric:"tsdk.memq.count", Value:float64(qmgr.CountMem()), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.memq.limit", Value:float64(qmgr.max), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.received", Value:float64(counters.received), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.sent", Value:float64(counters.sent), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped", Value:float64(counters.dropped), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.dropped_disk_full", Value:float64(counters.droppedDiskFull), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.metrics.invalid", Value:float64(counters.invalid), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.http_errors", Value:float64(counters.http_errors), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.recvq.count", Value:float64(len(recvq)), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.recvq.limit", Value:float64(cap(recvq)), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.diskq.count", Value:float64(dqmgr.Count()), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.diskq.usage", Value:float64(dqmgr.GetDiskUsage()), Timestamp: now, Tags: configuration.Tags})
-        metrics = append(metrics, Metric{Metric:"tsdk.senders.count", Value:float64(live_senders), Timestamp: now, Tags: configuration.Tags})
+        metrics = append(metrics, makeMetric("tsdk.memq.count", qmgr.CountMem(), now))
+        metrics = append(metrics, makeMetric("tsdk.memq.limit", qmgr.max, now))
+        metrics = append(metrics, makeMetric("tsdk.metrics.received", counters.received, now))
+        metrics = append(metrics, makeMetric("tsdk.metrics.sent", counters.sent, now))
+        metrics = append(metrics, makeMetric("tsdk.metrics.dropped", counters.dropped, now))
+        metrics = append(metrics, makeMetric("tsdk.metrics.dropped_disk_full", counters.droppedDiskFull, now))
+        metrics = append(metrics, makeMetric("tsdk.metrics.invalid", counters.invalid, now))
+        metrics = append(metrics, makeMetric("tsdk.http_errors", counters.http_errors, now))
+        metrics = append(metrics, makeMetric("tsdk.recvq.count", len(recvq), now))
+        metrics = append(metrics, makeMetric("tsdk.recvq.limit", cap(recvq), now))
+        metrics = append(metrics, makeMetric("tsdk.diskq.count", dqmgr.Count(), now))
+        metrics = append(metrics, makeMetric("tsdk.diskq.usage", dqmgr.GetDiskUsage(), now))
+        metrics = append(metrics, makeMetric("tsdk.senders.count", live_senders, now))
 
         for idx, _ := range metrics {
             prioq <- &metrics[idx]

@@ -55,7 +55,7 @@ func TestHttpReceiver(t *testing.T) {
         }
 
         for idx, m := range metrics {
-            if m.Value != 99 {
+            if m.Value != "99" {
                 t.Errorf("Expected metric value to be 99, but %v", m.Value)
             }
 
@@ -94,7 +94,7 @@ func TestTelnetReceiver(t *testing.T) {
     }
 
     for idx, m := range metrics {
-        if m.Value != 1234 {
+        if m.Value != "1234" {
             t.Errorf("Expected metric value to be 1234, but got %v", m.Value)
         }
 
