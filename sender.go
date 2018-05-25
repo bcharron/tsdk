@@ -9,14 +9,14 @@ import(
 )
 
 func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup) {
-    sconfig := sarama.NewConfig()
-    sconfig.Producer.Return.Successes = true
-
     wg.Add(1)
     defer wg.Done()
 
     atomic.AddInt32(&live_senders, 1)
     defer atomic.AddInt32(&live_senders, -1)
+
+    sconfig := sarama.NewConfig()
+    sconfig.Producer.Return.Successes = true
 
     producer, err := sarama.NewSyncProducer(configuration.Brokers, sconfig)
     if err != nil {

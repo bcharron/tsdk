@@ -88,6 +88,9 @@ func showStats(recvq chan MetricList, qmgr *QueueManager, dqmgr *DiskQueueManage
 }
 
 func waitForSenders(wg *sync.WaitGroup, done chan bool) {
+    // Give a chance for the senders to start.
+    <-time.After(1 * time.Second)
+
     wg.Wait()
     done <- true
 }
@@ -150,6 +153,7 @@ func main() {
     signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
     senders_done := make(chan bool)
+
     go waitForSenders(senders_wg, senders_done)
 
     done := false
