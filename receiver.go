@@ -233,13 +233,6 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     }
 
     m.Value = json.Number(fields[3])
-    _, err = strconv.ParseFloat(fields[3], 64)
-    if err != nil {
-        glog.Infof("Invalid value in PUT from %v: \"%v\"", c.RemoteAddr(), fields[3])
-        r.counters.inc_invalid(1)
-        c.Write([]byte("put: Invalid value. Expected float.\n"))
-        return
-    }
 
     tags := fields[4:]
     for x := 0; x < len(tags); x++ {
@@ -260,8 +253,9 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
         metrics[0] = &m
         r.recvq <- metrics
     } else {
-        c.Write([]byte(err))
-        c.Write([]byte("\n"))
+        glog.V(3).Infof("Invalid metric from %s", c.RemoteAddr().String())
+        r.counters.inc_invalid(1)
+        c.Write([]byte(fmt.Sprintf("put: %v\n", err)))
     }
 }
 
