@@ -188,7 +188,7 @@ func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
             case "PUT": r.handleTelnetPut(c, line, fields)
             case "VERSION": r.handleTelnetVersion(c, line)
             default: c.Write([]byte("ERROR: Command not understood\n"))
-                    fmt.Println("bad command: ", fields[0])
+                    glog.Infof("bad command \"%s\" from %s: ", fields[0], c.RemoteAddr().String())
         }
     }
 }
@@ -269,7 +269,7 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
     reader := bufio.NewReader(c)
     buf, err := reader.Peek(7)
     if err != nil {
-        fmt.Println(err)
+        glog.Infof("handleConnection: %v", err)
     } else {
         bufstr := string(buf)
 
@@ -319,8 +319,8 @@ func (r *Receiver) server(done chan bool) {
     for alive {
         c, err := ln.Accept()
         if err != nil {
-            fmt.Println(err)
-                continue
+            glog.Warningf("receiver: Failed to accept(): %v", err)
+            continue
         }
 
         select {
