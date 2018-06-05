@@ -18,6 +18,7 @@ type Configuration struct {
     DiskBatchSize int
     DiskQueuePath string
     DiskMaxSize int64
+    NetworkReadTimeoutMS int
     Tags map[string]string
 }
 
@@ -33,6 +34,7 @@ func (c *Configuration) loadDefaults() {
     c.DiskBatchSize = 1000
     c.DiskQueuePath = "dirq"
     c.DiskMaxSize = 10000000
+    c.NetworkReadTimeoutMS = 30000
     c.Tags = make(map[string]string)
 }
 

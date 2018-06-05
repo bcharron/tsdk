@@ -17,7 +17,7 @@ import (
     "time"
 )
 
-const VERSION string = "0.1"
+const VERSION string = "0.2"
 
 var configuration *Configuration
 
@@ -97,7 +97,13 @@ func waitForSenders(wg *sync.WaitGroup, done chan bool) {
 
 func main() {
     config_filename := flag.String("c", "config.json", "Path to the config JSON file")
+    show_version := flag.Bool("version", false, "Show version")
     flag.Parse()
+
+    if *show_version {
+        fmt.Printf("tsdk version %v\n", VERSION)
+        return
+    }
 
     configuration = loadConfig(*config_filename)
     counters := new(Counters)
@@ -108,7 +114,7 @@ func main() {
     // Senders need to be shutdown before queue managers.
     senders_wg := new(sync.WaitGroup)
 
-    glog.Info("Starting")
+    glog.Infof("Starting tsdk version %v", VERSION)
 
     disk_enqueue := make(chan MetricList, 100)
     disk_dequeue := make(chan MetricList)

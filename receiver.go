@@ -13,6 +13,7 @@ import(
     "net/http"
     "strconv"
     "strings"
+    "time"
 )
 
 type Receiver struct {
@@ -168,6 +169,9 @@ func (r *Receiver) HandleHttpVersion(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
+    timeout_duration := time.Duration(configuration.NetworkReadTimeoutMS) * time.Millisecond
+    c.SetReadDeadline(time.Now().Add(timeout_duration))
+
     s := bufio.NewScanner(reader)
 
     defer c.Close()
@@ -175,6 +179,8 @@ func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
     // fmt.Println("TEXT: [" + s.Text() + "]")
 
     for ok := s.Scan(); ok; ok = s.Scan()  {
+        c.SetReadDeadline(time.Time{})
+
         line := s.Text()
         // glog.V(5).Infof("handleTelnet: Read line [%v]", line)
 
@@ -190,6 +196,8 @@ func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
             default: c.Write([]byte("ERROR: Command not understood\n"))
                     glog.Infof("bad command \"%s\" from %s: ", fields[0], c.RemoteAddr().String())
         }
+
+        c.SetReadDeadline(time.Now().Add(timeout_duration))
     }
 }
 
@@ -260,10 +268,14 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
 }
 
 func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
+    duration := time.Duration(configuration.NetworkReadTimeoutMS) * time.Millisecond
+    c.SetReadDeadline(time.Now().Add(duration))
+
     reader := bufio.NewReader(c)
     buf, err := reader.Peek(7)
     if err != nil {
         glog.Infof("handleConnection: %v", err)
+        c.Close()
     } else {
         bufstr := string(buf)
 

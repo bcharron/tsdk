@@ -10,6 +10,7 @@
     "DiskBatchSize": 1000,
     "DiskQueuePath": "dirq",
     "DiskMaxSize": 10000000000,
+    "NetworkReadTimeoutMS": 5000,
     "Tags": {
         "env": "prod"
     }
