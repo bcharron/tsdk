@@ -8,7 +8,7 @@ import(
     "sync/atomic"
 )
 
-func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup) {
+func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup, counters *Counters) {
     wg.Add(1)
     defer wg.Done()
 
@@ -62,6 +62,7 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
             glog.Errorf("[%s] Unable to convert to JSON: %v", name, err)
             // Discard batch, it won't be better next time.
             qmgr <- QMessage{"COMMIT", name, myqueue}
+            counters.inc_serializationError(uint64(len(batch.metrics)));
         } else {
             value := sarama.StringEncoder(json_output)
 
@@ -70,12 +71,14 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
                 Key: key,
                 Value: value,
                 Headers: []sarama.RecordHeader{},
-                Metadata: nil }
+                Metadata: nil,
+            }
 
             _, _, err = producer.SendMessage(&kafkaMessage)
             if err != nil {
                 glog.Errorf("[%s] Producer failed: %v", name, err)
                 qmgr <- QMessage{"ROLLBACK", name, myqueue}
+                counters.inc_sendFailed(1);
             } else {
                 glog.V(3).Infof("[%s] Committing %v metrics.\n", name, len(batch.metrics))
                 qmgr <- QMessage{"COMMIT", name, myqueue}

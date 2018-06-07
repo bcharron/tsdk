@@ -12,6 +12,8 @@ type Counters struct {
     droppedDiskFull uint64  // Dropped because disk queue was full
     invalid uint64          // Malformed json, invalid metric name, missing tags, etc.
     http_errors uint64
+    serializationError uint64   // Unable to convert metric to json in sender()
+    sendFailed uint64       // Failed to send batch to kafka (this is a retriable error)
 }
 
 func (c *Counters) inc_http_errors(delta uint64) {
@@ -40,4 +42,12 @@ func (c *Counters) inc_invalid(delta uint64) {
 
 func (c *Counters) inc_droppedDiskFull(delta uint64) {
     atomic.AddUint64(&c.droppedDiskFull, delta)
+}
+
+func (c *Counters) inc_serializationError(delta uint64) {
+    atomic.AddUint64(&c.serializationError, delta)
+}
+
+func (c *Counters) inc_sendFailed(delta uint64) {
+    atomic.AddUint64(&c.sendFailed, delta)
 }

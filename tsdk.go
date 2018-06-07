@@ -17,7 +17,7 @@ import (
     "time"
 )
 
-const VERSION string = "0.2"
+const VERSION string = "0.2.1"
 
 var configuration *Configuration
 
@@ -58,6 +58,8 @@ func sendStats(recvq chan MetricList, prioq chan *Metric, qmgr *QueueManager, dq
         metrics = append(metrics, makeMetric("tsdk.diskq.count", dqmgr.Count(), now))
         metrics = append(metrics, makeMetric("tsdk.diskq.usage", dqmgr.GetDiskUsage(), now))
         metrics = append(metrics, makeMetric("tsdk.senders.count", live_senders, now))
+        metrics = append(metrics, makeMetric("tsdk.send.failed", counters.sendFailed, now))
+        metrics = append(metrics, makeMetric("tsdk.send.serializationError", counters.serializationError, now))
 
         for idx, _ := range metrics {
             prioq <- &metrics[idx]
@@ -149,7 +151,7 @@ func main() {
         c := make(chan Batch, 1)
         done := make(chan bool)
         shutdown_channels = append(shutdown_channels, done)
-        go sender(name, qmgr_chan, c, done, senders_wg)
+        go sender(name, qmgr_chan, c, done, senders_wg, counters)
     }
 
     go qmgr.queueManager(recvq, prioq, qmgr_chan, shutdown_qmgr)
