@@ -19,6 +19,7 @@ type Configuration struct {
     DiskQueuePath string
     DiskMaxSize int64
     NetworkReadTimeoutMS int
+    CompressionCodec string
     Tags map[string]string
 }
 
@@ -35,6 +36,7 @@ func (c *Configuration) loadDefaults() {
     c.DiskQueuePath = "dirq"
     c.DiskMaxSize = 10000000
     c.NetworkReadTimeoutMS = 30000
+    c.CompressionCodec = "gzip"
     c.Tags = make(map[string]string)
 }
 

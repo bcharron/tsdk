@@ -8,6 +8,23 @@ import(
     "sync/atomic"
 )
 
+func getCompressionCodec(name string) sarama.CompressionCodec {
+    codecs := map[string]sarama.CompressionCodec {
+        "none" : sarama.CompressionNone,
+        "gzip" : sarama.CompressionGZIP,
+        "snappy" : sarama.CompressionSnappy,
+        "lz4" : sarama.CompressionLZ4,
+    }
+
+    codec, ok := codecs[name]
+    if ! ok {
+        glog.Warningf("Failed to lookup compression codec '%v'. Valid choices are: none, gzip, snappy, lz4. Defaulting to none.", name)
+        codec = sarama.CompressionNone
+    }
+
+    return codec
+}
+
 func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup, counters *Counters) {
     wg.Add(1)
     defer wg.Done()
@@ -17,6 +34,7 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
 
     sconfig := sarama.NewConfig()
     sconfig.Producer.Return.Successes = true
+    sconfig.Producer.Compression = getCompressionCodec(configuration.CompressionCodec)
 
     producer, err := sarama.NewSyncProducer(configuration.Brokers, sconfig)
     if err != nil {

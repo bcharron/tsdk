@@ -11,6 +11,7 @@
     "DiskQueuePath": "dirq",
     "DiskMaxSize": 10000000000,
     "NetworkReadTimeoutMS": 5000,
+    "CompressionCodec": "gzip",
     "Tags": {
         "env": "prod"
     }
