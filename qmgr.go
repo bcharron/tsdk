@@ -13,6 +13,7 @@ type QueueManager struct {
     prioq MetricList
 
     trx map[string]Batch
+    trx_count int
 
     // Max size of the memory queue
     max int
@@ -41,6 +42,7 @@ func (q *QueueManager) Init(config *Configuration, to_disk chan MetricList, from
     q.memq = make(MetricList, 0, q.max)
     q.prioq = make(MetricList, 0, 1000)
     q.trx = make(map[string]Batch)
+    q.trx_count = 0
     q.from_disk = from_disk
     q.to_disk = to_disk
     q.counters = counters
@@ -93,19 +95,26 @@ func (q *QueueManager) take(n int, trx_name string) Batch {
 
     if len(b.metrics) > 0 {
         q.trx[trx_name] = b
+        q.updateTrxCount()
     }
 
     return b
 }
 
-func (q *QueueManager) CountMem() int {
-    x := len(q.memq) + len(q.prioq)
+// Avoid concurrent read/write access to the map by pre-computing its size
+// every time it's updated.
+func (q *QueueManager) updateTrxCount() {
+    x := 0
 
     for _, batch := range q.trx {
         x += len(batch.metrics)
     }
 
-    return(x)
+    q.trx_count = x
+}
+
+func (q *QueueManager) CountMem() int {
+    return(len(q.memq) + len(q.prioq) + q.trx_count)
 }
 
 func (q *QueueManager) add_mem(metric *Metric) {
@@ -172,6 +181,8 @@ func (q *QueueManager) rollback(name string) {
         q.add(b.metrics, true)
         delete(q.trx, name)
     }
+
+    q.updateTrxCount()
 }
 
 func (q *QueueManager) commit(name string) {
@@ -180,6 +191,8 @@ func (q *QueueManager) commit(name string) {
         q.counters.inc_sent(uint64(len(b.metrics)))
         delete(q.trx, name)
     }
+
+    q.updateTrxCount()
 }
 
 // Takes incoming metrics from recvq, queue them in memory or disk, and offer
@@ -270,6 +283,8 @@ func (q *QueueManager) shutdown() {
             glog.Infof("qmgr: Rolling back transaction of %v metrics from [%s]", len(batch.metrics), name)
             q.send_to_disk(batch.metrics, true)
         }
+
+        q.updateTrxCount()
     }
 
     glog.Infof("qmgr: Asking disk queue to shutdown.")
