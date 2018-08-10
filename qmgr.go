@@ -154,7 +154,7 @@ func (q *QueueManager) send_to_disk(metrics MetricList, wait bool) {
         } else {
             select {
                 case q.to_disk <- metrics:
-                    glog.Infof("qmgr: Sent %v metrics to disk", len(metrics))
+                    glog.V(4).Infof("qmgr: Sent %v metrics to disk", len(metrics))
 
                 default:
                     q.counters.inc_dropped(uint64(len(metrics)))
