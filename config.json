@@ -12,6 +12,7 @@
     "DiskMaxSize": 10000000000,
     "NetworkReadTimeoutMS": 5000,
     "CompressionCodec": "gzip",
+    "MaxTags": 8,
     "Tags": {
         "env": "prod"
     }

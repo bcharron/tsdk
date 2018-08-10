@@ -135,7 +135,7 @@ func main() {
     prioq := make(chan *Metric, 1000)
 
     r := new(Receiver)
-    r.Init(recvq, counters)
+    r.Init(recvq, counters, configuration)
 
     shutdown_server := make(chan bool, 1)
     go r.server(shutdown_server)

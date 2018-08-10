@@ -105,7 +105,7 @@ func TestMetricValidation(t *testing.T) {
     expected = append(expected, false)
 
     for i, m := range(metrics) {
-        result, err := m.isValid()
+        result, err := m.isValid(8)
         if result != expected[i] {
             t.Errorf("Expected isValid(%v):%v but got %v. Err: %v", m, expected[i], result, err)
         }

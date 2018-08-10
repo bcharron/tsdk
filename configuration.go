@@ -21,6 +21,7 @@ type Configuration struct {
     NetworkReadTimeoutMS int
     CompressionCodec string
     Tags map[string]string
+    MaxTags int
 }
 
 func (c *Configuration) loadDefaults() {
@@ -38,6 +39,7 @@ func (c *Configuration) loadDefaults() {
     c.NetworkReadTimeoutMS = 30000
     c.CompressionCodec = "gzip"
     c.Tags = make(map[string]string)
+    c.MaxTags = 8
 }
 
 func loadConfig(filename string) *Configuration {

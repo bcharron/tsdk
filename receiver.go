@@ -19,11 +19,13 @@ import(
 type Receiver struct {
     recvq chan MetricList
     counters *Counters
+    config *Configuration
 }
 
-func (r *Receiver) Init(recvq chan MetricList, counters *Counters) {
+func (r *Receiver) Init(recvq chan MetricList, counters *Counters, config *Configuration) {
     r.recvq = recvq
     r.counters = counters
+    r.config = config
 }
 
 func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
@@ -129,7 +131,7 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     valid_metrics := make(MetricList, 0, len(metrics))
     for idx, _ := range metrics {
         m := &metrics[idx]
-        if ok, errmsg := m.isValid(); ok {
+        if ok, errmsg := m.isValid(r.config.MaxTags); ok {
             valid_metrics = append(valid_metrics, m)
         } else {
             glog.V(3).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
@@ -169,7 +171,7 @@ func (r *Receiver) HandleHttpVersion(w http.ResponseWriter, req *http.Request) {
 }
 
 func (r *Receiver) handleTelnet(reader *bufio.Reader, c net.Conn) {
-    timeout_duration := time.Duration(configuration.NetworkReadTimeoutMS) * time.Millisecond
+    timeout_duration := time.Duration(r.config.NetworkReadTimeoutMS) * time.Millisecond
     c.SetReadDeadline(time.Now().Add(timeout_duration))
 
     s := bufio.NewScanner(reader)
@@ -256,7 +258,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
         }
     }
 
-    if ok, err := m.isValid(); ok {
+    if ok, err := m.isValid(r.config.MaxTags); ok {
         metrics := make(MetricList, 1, 1)
         metrics[0] = &m
         r.recvq <- metrics
@@ -268,7 +270,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
 }
 
 func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
-    duration := time.Duration(configuration.NetworkReadTimeoutMS) * time.Millisecond
+    duration := time.Duration(r.config.NetworkReadTimeoutMS) * time.Millisecond
     c.SetReadDeadline(time.Now().Add(duration))
 
     reader := bufio.NewReader(c)
@@ -306,7 +308,7 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
 }
 
 func (r *Receiver) server(done chan bool) {
-    ln, err := net.Listen("tcp", configuration.ListenAddr)
+    ln, err := net.Listen("tcp", r.config.ListenAddr)
     if err != nil {
         panic(err)
     }

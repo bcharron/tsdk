@@ -16,6 +16,7 @@ type TestData struct {
 
 func (d *TestData) init () {
     d.config = new(Configuration)
+    d.config.loadDefaults()
     d.config.DiskBatchSize = 10
     d.config.DiskQueuePath = "testq"
 
@@ -23,7 +24,7 @@ func (d *TestData) init () {
     d.counters = new(Counters)
 
     d.r = new(Receiver)
-    d.r.Init(d.recvq, d.counters)
+    d.r.Init(d.recvq, d.counters, d.config)
 }
 
 func TestHttpReceiver(t *testing.T) {

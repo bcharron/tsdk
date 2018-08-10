@@ -30,7 +30,7 @@ func looksLikeInteger(s json.Number) bool {
     return true
 }
 
-func (m *Metric) isValid() (bool, string) {
+func (m *Metric) isValid(maxTags int) (bool, string) {
     if len(m.Metric) < 3 {
         return false, "Metric name is too short"
     }
@@ -49,7 +49,7 @@ func (m *Metric) isValid() (bool, string) {
         }
     }
 
-    if len(m.Tags) > 8 {
+    if len(m.Tags) > maxTags {
         return false, "Too any tags"
     }
 
