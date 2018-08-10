@@ -17,6 +17,7 @@ type Configuration struct {
     SendBatchSize int
     DiskBatchSize int
     DiskQueuePath string
+    DiskQueueBuffer int
     DiskMaxSize int64
     NetworkReadTimeoutMS int
     CompressionCodec string
@@ -35,6 +36,7 @@ func (c *Configuration) loadDefaults() {
     c.SendBatchSize = 1000
     c.DiskBatchSize = 1000
     c.DiskQueuePath = "dirq"
+    c.DiskQueueBuffer = 10000
     c.DiskMaxSize = 10000000
     c.NetworkReadTimeoutMS = 30000
     c.CompressionCodec = "gzip"

@@ -118,7 +118,7 @@ func main() {
 
     glog.Infof("Starting tsdk version %v", VERSION)
 
-    disk_enqueue := make(chan MetricList, 100)
+    disk_enqueue := make(chan MetricList, configuration.DiskQueueBuffer)
     disk_dequeue := make(chan MetricList)
 
     shutdown_qmgr := make(chan bool)
