@@ -50,6 +50,8 @@ func TestHttpReceiver(t *testing.T) {
             t.Errorf("Expected status code 200 but got %v", result.StatusCode)
         }
 
+        // XXX: Verify failed/success/errors
+
         metrics := <-data.recvq
         if len(metrics) != expectedMetrics[loop] {
             t.Errorf("Expected to receive 2 metrics, but got %v", len(metrics))

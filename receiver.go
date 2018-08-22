@@ -161,9 +161,9 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
 }
 
 type HTTPOutputMessage struct {
-    Success int
-    Failed int
-    Errors []string
+    Success int `json:"success"`
+    Failed int `json:"failed"`
+    Errors []string `json:"errors"`
 }
 
 func (r *Receiver) HandleHttpVersion(w http.ResponseWriter, req *http.Request) {
