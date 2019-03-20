@@ -74,7 +74,6 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
 
         glog.V(3).Infof("[%s] Sending %v metrics.", name, len(batch.metrics))
 
-        key := sarama.StringEncoder(batch.metrics[0].Metric)
         json_output, err := json.Marshal(batch.metrics)
         if err != nil {
             glog.Errorf("[%s] Unable to convert to JSON: %v", name, err)
@@ -86,7 +85,6 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
 
             kafkaMessage := sarama.ProducerMessage{
                 Topic: configuration.Topic,
-                Key: key,
                 Value: value,
                 Headers: []sarama.RecordHeader{},
                 Metadata: nil,

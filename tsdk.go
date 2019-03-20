@@ -17,7 +17,7 @@ import (
     "time"
 )
 
-const VERSION string = "0.2.4"
+const VERSION string = "0.2.5"
 
 var configuration *Configuration
 
