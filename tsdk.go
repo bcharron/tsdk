@@ -11,6 +11,7 @@ import (
     "github.com/golang/glog"
     "os"
     "os/signal"
+    "github.com/Shopify/sarama"
     "strconv"
     "syscall"
     "sync"
@@ -146,12 +147,28 @@ func main() {
 
     shutdown_channels := make([]chan bool, 0, nb_senders)
 
+    sconfig := sarama.NewConfig()
+    sconfig.ClientID = "tsdk"
+    sconfig.Producer.Flush.Messages = 1000
+    sconfig.Producer.Flush.Frequency = time.Millisecond * 1000
+    sconfig.Producer.Return.Successes = true
+    sconfig.Producer.RequiredAcks = sarama.WaitForLocal
+    sconfig.Producer.Compression = GetCompressionCodec(configuration.CompressionCodec)
+    
+    producer, err := sarama.NewAsyncProducer(configuration.Brokers, sconfig)
+    if err != nil {
+        glog.Errorf("Unable to instantiate kafka producer: %v", err)
+        return
+    }
+
+    defer producer.Close()
+
     for x := 0; x < nb_senders; x++ {
         name := fmt.Sprintf("sender-%v", x)
         c := make(chan Batch, 1)
         done := make(chan bool)
         shutdown_channels = append(shutdown_channels, done)
-        go sender(name, qmgr_chan, c, done, senders_wg, counters)
+        go sender(name, qmgr_chan, c, done, senders_wg, counters, producer)
     }
 
     go qmgr.queueManager(recvq, prioq, qmgr_chan, shutdown_qmgr)
@@ -166,6 +183,22 @@ func main() {
 
     done := false
 
+    go func() {
+        for !done {
+            // XXX: Handle shutdown gracefully!
+            select {
+            case error := <-producer.Errors():
+                glog.Warningf("Failed to send to kafka: %v", error.Err)
+                counters.inc_sendFailed(1)
+                // XXX: Return to sender!
+
+            case <-producer.Successes():
+                glog.V(4).Infof("main: Message successfully sent to kafka.")
+                counters.inc_sent(1)
+            }
+        }       
+    }()
+
     for !done {
         select {
             case sig := <-c:
@@ -177,6 +210,8 @@ func main() {
                 done = true
         }
     }
+
+    producer.Close()
 
     shutdown_server <- true
 

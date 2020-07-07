@@ -83,7 +83,7 @@ func (q *DiskQueueManager) flush_disk(force bool) error {
     if len(q.diskbuf) > 0 {
         glog.V(3).Infof("Flushing %v metrics to disk.", len(q.diskbuf))
         if _, err := q.diskq.EnqueueObject(q.diskbuf); err != nil {
-            glog.Error("Failed to queue %v metrics to disk: %v\n", len(q.diskbuf), err)
+            glog.Errorf("Failed to queue %v metrics to disk: %v\n", len(q.diskbuf), err)
             return(err)
         }
 

@@ -4,11 +4,36 @@ import(
     "encoding/json"
     "github.com/golang/glog"
     "github.com/Shopify/sarama"
+    "sort"
+    "strings"
     "sync"
     "sync/atomic"
+    //"time"
 )
 
-func getCompressionCodec(name string) sarama.CompressionCodec {
+var send_arrays = false
+
+func (metric *Metric) makeKafkaKey() string {
+	fields := make([]string, 0, len(metric.Tags) * 2 + 1)
+	fields = append(fields, metric.Metric)
+
+	keys := make([]string, 0, len(metric.Tags) + 1)
+	for k := range metric.Tags {
+		keys = append(keys, k)
+	}
+
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		fields = append(fields, k, metric.Tags[k])
+	}
+
+	ret := strings.Join(fields, ":")
+
+	return(ret)
+}
+
+func GetCompressionCodec(name string) sarama.CompressionCodec {
     codecs := map[string]sarama.CompressionCodec {
         "none" : sarama.CompressionNone,
         "gzip" : sarama.CompressionGZIP,
@@ -25,24 +50,13 @@ func getCompressionCodec(name string) sarama.CompressionCodec {
     return codec
 }
 
-func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup, counters *Counters) {
+
+func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup, counters *Counters, producer sarama.AsyncProducer) {
     wg.Add(1)
     defer wg.Done()
 
     atomic.AddInt32(&live_senders, 1)
     defer atomic.AddInt32(&live_senders, -1)
-
-    sconfig := sarama.NewConfig()
-    sconfig.Producer.Return.Successes = true
-    sconfig.Producer.Compression = getCompressionCodec(configuration.CompressionCodec)
-
-    producer, err := sarama.NewSyncProducer(configuration.Brokers, sconfig)
-    if err != nil {
-        glog.Errorf("Unable to instantiate kafka producer: %v", err)
-        return
-    }
-
-    defer producer.Close()
 
     alive := true
 
@@ -72,36 +86,29 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
             continue
         }
 
+        qmgr <- QMessage{"COMMIT", name, myqueue}
+
         glog.V(3).Infof("[%s] Sending %v metrics.", name, len(batch.metrics))
 
-        json_output, err := json.Marshal(batch.metrics)
-        if err != nil {
-            glog.Errorf("[%s] Unable to convert to JSON: %v", name, err)
-            // Discard batch, it won't be better next time.
-            qmgr <- QMessage{"COMMIT", name, myqueue}
-            counters.inc_serializationError(uint64(len(batch.metrics)));
-        } else {
-            value := sarama.StringEncoder(json_output)
-
-            kafkaMessage := sarama.ProducerMessage{
-                Topic: configuration.Topic,
-                Value: value,
-                Headers: []sarama.RecordHeader{},
-                Metadata: nil,
-            }
-
-            _, _, err = producer.SendMessage(&kafkaMessage)
+        for _, metric := range batch.metrics {
+            json_output, err := json.Marshal(metric)
             if err != nil {
-                glog.Errorf("[%s] Producer failed: %v", name, err)
-                qmgr <- QMessage{"ROLLBACK", name, myqueue}
-                counters.inc_sendFailed(1);
+                glog.Errorf("[%s] Unable to convert to JSON: %v", name, err)
+                counters.inc_serializationError(uint64(len(batch.metrics)));
             } else {
-                glog.V(3).Infof("[%s] Committing %v metrics.\n", name, len(batch.metrics))
-                qmgr <- QMessage{"COMMIT", name, myqueue}
-            }
+                key := sarama.StringEncoder(metric.makeKafkaKey())
+                value := sarama.StringEncoder(json_output)
 
-            // For testing
-            // <-time.After(time.Second)
+                kafkaMessage := &sarama.ProducerMessage{
+                    Topic: configuration.Topic,
+                    Key: key,
+                    Value: value,
+                    Headers: []sarama.RecordHeader{},
+                    Metadata: metric,
+                }
+
+                producer.Input() <- kafkaMessage
+            }
         }
     }
 
