@@ -100,11 +100,18 @@ func (s *Sender) loop(ctx context.Context, wg *sync.WaitGroup) {
     alive := true
 
     for alive {
+    	// Prioritize the retry queue as long as there's data in it.
     	select {
-    	// This is not quite right as select() will choose a random channel if
-    	// more than one is ready. We'd like to have retryq prioritized somehow..
     	case metric := <-s.retryq:
-    		s.queue(metric)
+			s.queue(metric)
+			continue
+
+		default:
+    	}
+
+    	select {
+    	case metric := <-s.retryq:
+    			s.queue(metric)
 
     	case metric := <-s.memq:
     		s.queue(metric)
