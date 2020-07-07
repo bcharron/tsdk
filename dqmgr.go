@@ -3,6 +3,7 @@ package main;
 import(
     "bytes"
     "encoding/gob"
+    "errors"
     "github.com/beeker1121/goque"
     "github.com/golang/glog"
     "os"
@@ -16,8 +17,8 @@ type DiskQueueManager struct {
     tosend MetricList
 
     // Receive from memq, send to memq
-    recvq chan MetricList
-    sendq chan MetricList
+    recvq chan *Metric
+    sendq chan *Metric
 
     // How much disk space is being used
     diskUsage int64
@@ -34,7 +35,7 @@ type DiskQueueManager struct {
     config *Configuration
 }
 
-func (q *DiskQueueManager) Init(config *Configuration, recvq chan MetricList, sendq chan MetricList, done chan bool, counters *Counters) (bool, error) {
+func (q *DiskQueueManager) Init(config *Configuration, recvq chan *Metric, sendq chan *Metric, done chan bool, counters *Counters) (bool, error) {
     var err error
 
     q.config = config
@@ -65,14 +66,18 @@ func (q *DiskQueueManager) GetDiskUsage() int64 {
     return(q.diskUsage)
 }
 
-func (q *DiskQueueManager) queue_to_disk(metrics MetricList, force bool) error {
-    for _, metric := range metrics {
-        q.diskbuf = append(q.diskbuf, *metric)
+func (q *DiskQueueManager) queue_to_disk(metric *Metric, force bool) error {
+    if metric == nil {
+        glog.Warningf("dqmgr: queue_to_disk() received nil metric!")
+        err := errors.New("dqmgr: nil metric")
+        return(err)
+    }
 
-        if len(q.diskbuf) >= q.batch_size {
-            if err := q.flush_disk(force); err != nil {
-                return(err)
-            }
+    q.diskbuf = append(q.diskbuf, *metric)
+
+    if len(q.diskbuf) >= q.batch_size {
+        if err := q.flush_disk(force); err != nil {
+            return(err)
         }
     }
 
@@ -139,18 +144,9 @@ func (q *DiskQueueManager) shutdown() {
     }
     q.flush_disk(true)
 
-    done := false
-
     glog.Infof("dqmgr: Draining memq")
-    for !done {
-        select {
-            case metrics := <-q.recvq:
-                q.queue_to_disk(metrics, true)
-
-            default:
-                done = true
-                // All done
-        }
+    for metric := range q.recvq {
+        q.queue_to_disk(metric, true)
     }
 
     glog.Infof("dqmgr: Flushing last metrics to disk")
@@ -163,7 +159,9 @@ func (q *DiskQueueManager) shutdown() {
 }
 
 func (q *DiskQueueManager) diskQueueManager() {
-    var sendq chan MetricList
+    var sendq chan *Metric
+    var to_send *Metric
+
     alive := true
     acceptingMetrics := true
     duChannel := make(chan int64)
@@ -177,23 +175,29 @@ func (q *DiskQueueManager) diskQueueManager() {
             }
 
             sendq = q.sendq
+            to_send = q.tosend[0]
         } else {
             sendq = nil
+            to_send = nil
         }
 
         select {
-            case metrics := <-q.recvq:
-                glog.V(3).Infof("dqmgr: Received %v metrics", len(metrics))
+            case metric := <-q.recvq:
+                glog.V(3).Infof("dqmgr: Received metric")
                 if acceptingMetrics {
-                    q.queue_to_disk(metrics, true)
+                    q.queue_to_disk(metric, true)
                 } else {
-                    glog.Warningf("dqmgr: Dropping metrics")
-                    q.counters.inc_droppedDiskFull(uint64(len(metrics)))
+                    glog.Warningf("dqmgr: Dropping metric")
+                    q.counters.inc_droppedDiskFull(1)
                 }
 
-            case sendq <- q.tosend:
-                glog.V(3).Infof("dqmgr: Sent %v metrics back to memq", len(q.tosend))
-                q.tosend = make(MetricList, 0, q.batch_size)
+            case sendq <- to_send:
+                glog.V(3).Infof("dqmgr: Sent metric back to memq")
+                if len(q.tosend) > 1 {
+                    q.tosend = q.tosend[1:]    
+                } else {
+                    q.tosend = make([]*Metric, 0, q.batch_size)
+                }
 
             case queueDiskUsage := <-duChannel:
                 q.diskUsage = queueDiskUsage

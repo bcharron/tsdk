@@ -1,6 +1,7 @@
 package main
 
 import(
+	"context"
     "encoding/json"
     "github.com/golang/glog"
     "github.com/Shopify/sarama"
@@ -50,8 +51,46 @@ func GetCompressionCodec(name string) sarama.CompressionCodec {
     return codec
 }
 
+type Sender struct {
+	producer sarama.AsyncProducer
+	memq chan *Metric
+	retryq chan *Metric
+	name string
+	counters *Counters
+}
 
-func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool, wg *sync.WaitGroup, counters *Counters, producer sarama.AsyncProducer) {
+/*
+func (s *Sender) Init(name string, memq chan *Metric, retryq chan *Metric, counters *Counters, producer sarama.AsyncProducer) {
+	s.name = name
+	s.memq = memq
+	s.retryq = retryq
+	s.counters = counters
+	s.producer = producer
+}
+*/
+
+func (s *Sender) queue(metric *Metric) {
+	json_output, err := json.Marshal(metric)
+	if err != nil {
+		glog.Errorf("[%s] Unable to convert to JSON: %v", s.name, err)
+		s.counters.inc_serializationError(1)
+	} else {
+		key := sarama.StringEncoder(metric.makeKafkaKey())
+		value := sarama.StringEncoder(json_output)
+
+		kafkaMessage := &sarama.ProducerMessage{
+			Topic: configuration.Topic,
+			Key: key,
+			Value: value,
+			Headers: []sarama.RecordHeader{},
+			Metadata: metric,
+		}
+
+		s.producer.Input() <- kafkaMessage
+	}
+}
+
+func (s *Sender) loop(ctx context.Context, wg *sync.WaitGroup) {
     wg.Add(1)
     defer wg.Done()
 
@@ -61,65 +100,21 @@ func sender(name string, qmgr chan QMessage, myqueue chan Batch, done chan bool,
     alive := true
 
     for alive {
-        glog.V(3).Infof("[%s] Asking the manager for a batch.", name)
-        select {
-            case qmgr <- QMessage{"TAKE", name, myqueue}:
-            case <-done:
-                glog.Infof("[%s] Received 'done'.", name)
-                alive = false
-                continue
-        }
+    	select {
+    	// This is not quite right as select() will choose a random channel if
+    	// more than one is ready. We'd like to have retryq prioritized somehow..
+    	case metric := <-s.retryq:
+    		s.queue(metric)
 
-        var batch Batch
+    	case metric := <-s.memq:
+    		s.queue(metric)
 
-        select {
-            case batch = <-myqueue:
-                // yay
-            case <-done:
-                glog.Infof("[%s] Received 'done'.", name)
-                alive = false
-                continue
-        }
-
-        if len(batch.metrics) == 0 {
-            glog.Infof("[%s] Received empty batch from qmgr.", name)
-            continue
-        }
-
-        qmgr <- QMessage{"COMMIT", name, myqueue}
-
-        glog.V(3).Infof("[%s] Sending %v metrics.", name, len(batch.metrics))
-
-        for _, metric := range batch.metrics {
-            json_output, err := json.Marshal(metric)
-            if err != nil {
-                glog.Errorf("[%s] Unable to convert to JSON: %v", name, err)
-                counters.inc_serializationError(uint64(len(batch.metrics)));
-            } else {
-                key := sarama.StringEncoder(metric.makeKafkaKey())
-                value := sarama.StringEncoder(json_output)
-
-                kafkaMessage := &sarama.ProducerMessage{
-                    Topic: configuration.Topic,
-                    Key: key,
-                    Value: value,
-                    Headers: []sarama.RecordHeader{},
-                    Metadata: metric,
-                }
-
-                producer.Input() <- kafkaMessage
-            }
-        }
+    	case <-ctx.Done():
+    		glog.Infof("[%s] Received 'done'.", s.name)
+    		alive = false
+    		continue
+    	}
     }
 
-    // Rollback any pending transaction
-    select {
-        case <-myqueue:
-            glog.Infof("[%s] Rolling back incomplete transaction", name)
-            qmgr <- QMessage{"ROLLBACK", name, myqueue}
-        default:
-            // Nothing to do
-    }
-
-    glog.Infof("[%s] Terminating.", name)
+    glog.Infof("[%s] Terminating.", s.name)
 }
