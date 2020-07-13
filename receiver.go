@@ -3,11 +3,13 @@ package main;
 import(
     "bufio"
     "compress/zlib"
+    "context"
     "encoding/json"
     "fmt"
     "io"
     "io/ioutil"
     "github.com/golang/glog"
+    // "github.com/prometheus/client_golang/prometheus"
     "compress/gzip"
     "net"
     "net/http"
@@ -17,15 +19,18 @@ import(
 )
 
 type Receiver struct {
-    recvq chan MetricList
-    counters *Counters
+    recvq chan *Metric
+    // diskq chan MetricList
     config *Configuration
 }
 
-func (r *Receiver) Init(recvq chan MetricList, counters *Counters, config *Configuration) {
+func NewReceiver(recvq chan *Metric, config *Configuration) (*Receiver) {
+    r := &Receiver{}
+
     r.recvq = recvq
-    r.counters = counters
     r.config = config
+
+    return(r)
 }
 
 func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
@@ -53,7 +58,9 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 glog.Warningf("Error reading gzipd body: %v", err)
                 w.WriteHeader(http.StatusBadRequest)
-                r.counters.inc_http_errors(1)
+                // r.counters.inc_http_errors(1)
+                HttpErrors.Inc()
+
                 return
             }
 
@@ -64,7 +71,8 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
             if err != nil {
                 glog.Warningf("Error reading deflated body: %v", err)
                 w.WriteHeader(http.StatusBadRequest)
-                r.counters.inc_http_errors(1)
+                // r.counters.inc_http_errors(1)
+                HttpErrors.Inc()
                 return
             }
 
@@ -78,7 +86,8 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
     if err != nil {
         glog.Info("httphandler: ERROR Reading Request Body:", err)
         w.WriteHeader(http.StatusBadRequest)
-        r.counters.inc_http_errors(1)
+        // r.counters.inc_http_errors(1)
+        HttpErrors.Inc()
         return
     }
 
@@ -102,7 +111,8 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         io.WriteString(w, "That was not JSON.\n")
         glog.Warningf("httphandler: Body received from %v doesn't look like JSON.", req.RemoteAddr)
         w.WriteHeader(http.StatusBadRequest)
-        r.counters.inc_invalid(1)
+        // r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         return
     }
 
@@ -120,12 +130,13 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         if err != nil {
             glog.Warning("httphandler: Failed to decode JSON: ", err)
             w.WriteHeader(http.StatusBadRequest)
-            r.counters.inc_invalid(1)
+            // r.counters.inc_invalid(1)
+            MetricsDroppedInvalid.Inc()
             return
         }
     }
 
-    glog.V(3).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
+    glog.V(4).Infof("httphandler: Received %v metrics from %v", len(metrics), req.RemoteAddr)
 
     errors := make([]string, 0)
     valid_metrics := make(MetricList, 0, len(metrics))
@@ -134,15 +145,20 @@ func (r *Receiver) HandleHttpPut(w http.ResponseWriter, req *http.Request) {
         if ok, errmsg := m.isValid(r.config.MaxTags); ok {
             valid_metrics = append(valid_metrics, m)
         } else {
-            glog.V(3).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
+            glog.V(4).Infof("httphandler: Discarding bad metric %v=%v: %v\n", m.Metric, m.Value, errmsg)
             errmsg2 := fmt.Sprintf("%v: %v", m.Metric, errmsg)
             errors = append(errors, errmsg2)
-            r.counters.inc_invalid(1)
+            // r.counters.inc_invalid(1)
+            MetricsDroppedInvalid.Inc()
         }
     }
 
     if len(valid_metrics) > 0 {
-        r.recvq <- valid_metrics
+        MetricsReceivedHTTP.Add(float64(len(valid_metrics)))
+
+        for _, metric := range(valid_metrics) {
+            r.recvq <- metric
+        }
     }
 
     out := new(HTTPOutputMessage)
@@ -215,21 +231,21 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
 
     if len(fields) < 5 {
         c.Write([]byte("put: Bad PUT line: not enough fields.\n"))
-        r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         return
     }
 
-    if fields[0] != "put" {
+    if strings.ToUpper(fields[0]) != "PUT" {
         glog.Infof("Garbage from %v:\"%v\"", c.RemoteAddr(), line)
         c.Write([]byte("put: Bad line. Should start with 'put'\n"))
-        r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         return
     }
 
     m.Metric = fields[1]
     if len(m.Metric) > 256 {
         glog.Infof("Metric name too long from %v: \"%v\"", c.RemoteAddr(), len(m.Metric))
-        r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         c.Write([]byte("put: Metric name is too long\n"))
         return
     }
@@ -237,7 +253,7 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
     m.Timestamp, err = strconv.ParseUint(fields[2], 10, 64)
     if err != nil {
         glog.Infof("Invalid timestamp in PUT from %v: \"%v\"", c.RemoteAddr(), fields[2])
-        r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         c.Write([]byte("put: Invalid timestamp\n"))
         return
     }
@@ -252,19 +268,18 @@ func (r *Receiver) handleTelnetPut(c net.Conn, line string, fields []string) {
             m.Tags[t[0]] = t[1]
         } else {
             glog.Infof("Invalid tags from %v: \"%v\"", c.RemoteAddr(), tags[x])
-            r.counters.inc_invalid(1)
+            MetricsDroppedInvalid.Inc()
             c.Write([]byte("put: Invalid tags\n"))
             return
         }
     }
 
     if ok, err := m.isValid(r.config.MaxTags); ok {
-        metrics := make(MetricList, 1, 1)
-        metrics[0] = &m
-        r.recvq <- metrics
+        MetricsReceivedTelnet.Inc()
+        r.recvq <- &m
     } else {
         glog.V(3).Infof("Invalid metric from %s", c.RemoteAddr().String())
-        r.counters.inc_invalid(1)
+        MetricsDroppedInvalid.Inc()
         c.Write([]byte(fmt.Sprintf("put: %v\n", err)))
     }
 }
@@ -284,20 +299,18 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
         fields := strings.Split(bufstr, " ")
         switch(strings.ToUpper(fields[0])) {
             case "GET":
-                glog.V(3).Info("Got an HTTP GET here")
-                fc := new(FakeConn)
-                fc.init(reader, c)
+                glog.V(4).Info("Got an HTTP GET here")
+                fc := NewFakeConn(reader, c)
                 fakeChannel <- fc
             case "POST":
-                glog.V(3).Info("Got an HTTP POST here")
-                fc := new(FakeConn)
-                fc.init(reader, c)
+                glog.V(4).Info("Got an HTTP POST here")
+                fc := NewFakeConn(reader, c)
                 fakeChannel <- fc
             case "PUT":
-                glog.V(3).Info("Got a TELNET PUT here")
+                glog.V(4).Info("Got a TELNET PUT here")
                 r.handleTelnet(reader, c)
             case "VERSION":
-                glog.V(3).Info("Got a TELNET VERSION here")
+                glog.V(4).Info("Got a TELNET VERSION here")
                 r.handleTelnet(reader, c)
             default:
                 glog.Infof("Received garbage from %v. Closing connection.", c.RemoteAddr())
@@ -307,7 +320,7 @@ func (r *Receiver) handleConnection(c net.Conn, fakeChannel chan net.Conn) {
     }
 }
 
-func (r *Receiver) server(done chan bool) {
+func (r *Receiver) server(ctx context.Context) {
     ln, err := net.Listen("tcp", r.config.ListenAddr)
     if err != nil {
         panic(err)
@@ -332,7 +345,7 @@ func (r *Receiver) server(done chan bool) {
         }
 
         select {
-            case <-done:
+            case <-ctx.Done():
                 alive = false
                 continue
             default:

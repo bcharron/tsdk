@@ -10,7 +10,7 @@ type Configuration struct {
     ListenAddr string
     Brokers []string
     Topic string
-    ReceiveBuffer int
+    ReceiveBufferSize int
     MemoryQueueSize int
     FlushPeriodMS int
     Senders int
@@ -23,13 +23,15 @@ type Configuration struct {
     CompressionCodec string
     Tags map[string]string
     MaxTags int
+    KafkaVersion string
+    KafkaBatchSize int
 }
 
 func (c *Configuration) loadDefaults() {
     c.ListenAddr = ":4242"
     c.Brokers = make([]string, 0)
     c.Topic = "tsdb"
-    c.ReceiveBuffer = 10000
+    c.ReceiveBufferSize = 10000
     c.MemoryQueueSize = 100000
     c.FlushPeriodMS = 5000
     c.Senders = 5
@@ -42,6 +44,8 @@ func (c *Configuration) loadDefaults() {
     c.CompressionCodec = "gzip"
     c.Tags = make(map[string]string)
     c.MaxTags = 8
+    c.KafkaVersion = "2.3.0"
+    c.KafkaBatchSize = 1000
 }
 
 func loadConfig(filename string) *Configuration {

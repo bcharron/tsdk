@@ -56,7 +56,7 @@ type Sender struct {
 	memq chan *Metric
 	retryq chan *Metric
 	name string
-	counters *Counters
+	// counters *Counters
 }
 
 /*
@@ -73,7 +73,8 @@ func (s *Sender) queue(metric *Metric) {
 	json_output, err := json.Marshal(metric)
 	if err != nil {
 		glog.Errorf("[%s] Unable to convert to JSON: %v", s.name, err)
-		s.counters.inc_serializationError(1)
+		// s.counters.inc_serializationError(1)
+
 	} else {
 		key := sarama.StringEncoder(metric.makeKafkaKey())
 		value := sarama.StringEncoder(json_output)
@@ -82,7 +83,7 @@ func (s *Sender) queue(metric *Metric) {
 			Topic: configuration.Topic,
 			Key: key,
 			Value: value,
-			Headers: []sarama.RecordHeader{},
+			// Headers: []sarama.RecordHeader{},
 			Metadata: metric,
 		}
 
@@ -91,20 +92,22 @@ func (s *Sender) queue(metric *Metric) {
 }
 
 func (s *Sender) loop(ctx context.Context, wg *sync.WaitGroup) {
-    wg.Add(1)
     defer wg.Done()
 
     atomic.AddInt32(&live_senders, 1)
     defer atomic.AddInt32(&live_senders, -1)
+    defer glog.Infof("[%s] Terminated.", s.name)
 
-    alive := true
-
-    for alive {
+    for {
     	// Prioritize the retry queue as long as there's data in it.
     	select {
     	case metric := <-s.retryq:
 			s.queue(metric)
 			continue
+
+    	case <-ctx.Done():
+    		glog.Infof("[%s] Received 'done'.", s.name)
+    		return
 
 		default:
     	}
@@ -118,10 +121,9 @@ func (s *Sender) loop(ctx context.Context, wg *sync.WaitGroup) {
 
     	case <-ctx.Done():
     		glog.Infof("[%s] Received 'done'.", s.name)
-    		alive = false
-    		continue
+    		return
     	}
     }
 
-    glog.Infof("[%s] Terminating.", s.name)
+    
 }

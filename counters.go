@@ -1,53 +1,70 @@
 package main
 
 import (
-    "sync/atomic"
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promauto"
+dto "github.com/prometheus/client_model/go"
 )
 
-type Counters struct {
-    received uint64
-    sent uint64
-    early_dropped uint64    // Dropped because the recvq was full
-    dropped uint64          // Dropped because memq was full and disk queue wasn't responding fast-enough
-    droppedDiskFull uint64  // Dropped because disk queue was full
-    invalid uint64          // Malformed json, invalid metric name, missing tags, etc.
-    http_errors uint64
-    serializationError uint64   // Unable to convert metric to json in sender()
-    sendFailed uint64       // Failed to send batch to kafka (this is a retriable error)
-}
+var (
+        ErrorCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+                Namespace: "tsdk",
+                Name: "errors",
+                Help: "Total number of errors"},
+                []string{"type"},
+        )
 
-func (c *Counters) inc_http_errors(delta uint64) {
-    atomic.AddUint64(&c.http_errors, delta)
-}
+        HttpErrors = ErrorCounter.With(prometheus.Labels{"type": "http"})
+        KafkaSendFailed = ErrorCounter.With(prometheus.Labels{"type": "kafka_send"})
 
-func (c *Counters) inc_received(delta uint64) {
-    atomic.AddUint64(&c.received, delta)
-}
+        MetricsReceived = promauto.NewCounterVec(prometheus.CounterOpts{
+                Namespace: "tsdk",
+                Name: "metrics_received",
+                Help: "Total number of metrics received"},
+                []string{"input"},
+        )
 
-func (c *Counters) inc_sent(delta uint64) {
-    atomic.AddUint64(&c.sent, delta)
-}
+        MetricsReceivedHTTP = MetricsReceived.With(prometheus.Labels{"input": "http"})
+        MetricsReceivedTelnet = MetricsReceived.With(prometheus.Labels{"input": "telnet"})
 
-func (c *Counters) inc_early(delta uint64) {
-    atomic.AddUint64(&c.early_dropped, delta)
-}
+        MetricsSent = promauto.NewCounter(prometheus.CounterOpts{
+                Namespace: "tsdk",
+                Name: "metrics_sent",
+                Help: "Total number of metrics sent",
+        })
 
-func (c *Counters) inc_dropped(delta uint64) {
-    atomic.AddUint64(&c.dropped, delta)
-}
+        MetricsDropped = promauto.NewCounterVec(prometheus.CounterOpts{
+                Namespace: "tsdk",
+                Name: "metrics_dropped",
+                Help: "Total number of metrics dropped",
+            },
+            []string{"cause"},
+        )
 
-func (c *Counters) inc_invalid(delta uint64) {
-    atomic.AddUint64(&c.invalid, delta)
-}
+        MetricsDroppedInvalid = MetricsDropped.With(prometheus.Labels{"cause": "invalid"})
+        MetricsDroppedDiskqFull = MetricsDropped.With(prometheus.Labels{"cause": "diskq_full"})
+        MetricsDroppedRecvqFull = MetricsDropped.With(prometheus.Labels{"cause": "recvq_full"})
+        MetricsDroppedSerializationErrors = MetricsDropped.With(prometheus.Labels{"cause": "serialization_error"})
 
-func (c *Counters) inc_droppedDiskFull(delta uint64) {
-    atomic.AddUint64(&c.droppedDiskFull, delta)
-}
+        QueueSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
+                Namespace: "tsdk",
+                Name: "queue_size",
+                Help: "Current number of items in queue",
+            },
+            []string{"queue"},
+        )
 
-func (c *Counters) inc_serializationError(delta uint64) {
-    atomic.AddUint64(&c.serializationError, delta)
-}
+        QueueSizeMem = QueueSize.With(prometheus.Labels{"queue": "mem"})
+        QueueSizeDisk = QueueSize.With(prometheus.Labels{"queue": "disk"})
+        QueueSizeRecv = QueueSize.With(prometheus.Labels{"queue": "recv"})
+        QueueSizeRetry = QueueSize.With(prometheus.Labels{"queue": "retry"})
+        QueueSizeOnDisk = QueueSize.With(prometheus.Labels{"queue": "ondisk"})
+        QueueSizeToDisk = QueueSize.With(prometheus.Labels{"queue": "todisk"})
+)
 
-func (c *Counters) inc_sendFailed(delta uint64) {
-    atomic.AddUint64(&c.sendFailed, delta)
+// https://github.com/prometheus/client_golang/issues/58
+func ReadCounter(m prometheus.Counter) float64 {
+    pb := &dto.Metric{}
+    m.Write(pb)
+    return pb.GetCounter().GetValue()
 }

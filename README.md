@@ -41,6 +41,7 @@ Create a file called `config.json` in the current directory:
         "DiskBatchSize": 1000,
         "DiskQueueBuffer": 10000,
         "DiskMaxSize": 10000000,
+        "KafkaVersion" "2.3.0",
         "Tags": {
             "env": "prod"
         }
@@ -48,10 +49,8 @@ Create a file called `config.json` in the current directory:
 
 - MemoryQueueSize: the maximum number of metrics to keep in memory before
   spilling to disk.
-- ReceiverBuffer: list of metrics that have been received but not yet
-  queued. However, it contains batches of metrics, not individual metrics. ie,
-  if one HTTP POST contains 100 metrics, the ReceiveBuffer will have a single
-  entry of 100 metrics. Don't set this value too high.
+- ReceiverBufferSize: metrics that have been received but not yet
+  queued.
 - Senders: the number of goroutines (~threads) that will send to Kafka.
 - SendBatchSize: how many metrics to put in each Kafka message. It is NOT the
   Kafka batch size.
@@ -68,12 +67,14 @@ Create a file called `config.json` in the current directory:
   `FlushPeriodMS` milliseconds before sending the queued metrics to Kafka.
 - CompressionCodec: compression used when sending to kafka. Valid options are
   "gzip", "lzo", "snappy" and "none".
+- KafkaVersion: The version of kafka brokers you are connecting to.
+- KafkaBatchSize: Number of messages to batch together when sending to kafka
 
 ## License
 
 This software is licensed under the GPL v3. See LICENSE for more details.
 
-tsdk Copyright (C) 2018 Benjamin Charron <bcharron@pobox.com>
+tsdk Copyright (C) 2020 Benjamin Charron <bcharron@pobox.com>
 This program comes with ABSOLUTELY NO WARRANTY.
 This is free software, and you are welcome to redistribute it under certain
 conditions.

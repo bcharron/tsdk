@@ -8,6 +8,9 @@ tsdk: $(src)
 run: tsdk
 	./tsdk -logtostderr=true -v=2 -c config.json
 
+vrun3: tsdk
+	./tsdk -logtostderr=true -v=3
+
 vrun: tsdk
 	./tsdk -logtostderr=true -v=5
 

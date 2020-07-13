@@ -11,9 +11,13 @@ type FakeConn struct {
     realConn net.Conn
 }
 
-func (c *FakeConn) init(reader *bufio.Reader, conn net.Conn) {
-    c.realConn = conn
-    c.reader = reader
+func NewFakeConn(reader *bufio.Reader, conn net.Conn) (*FakeConn) {
+    c := &FakeConn {
+        realConn: conn,
+        reader: reader,
+    }
+
+    return(c)
 }
 
 func (c *FakeConn) Read(b []byte) (n int, err error) { return c.reader.Read(b) }
