@@ -1,274 +1,274 @@
-package main;
+package main
 
-import(
-    "bytes"
-    "context"
-    "encoding/gob"
-    "errors"
-    "github.com/beeker1121/goque"
-    "github.com/golang/glog"
-    "os"
-    "path"
-    "time"
-    "sync"
+import (
+	"bytes"
+	"context"
+	"encoding/gob"
+	"errors"
+	"github.com/beeker1121/goque"
+	"github.com/golang/glog"
+	"os"
+	"path"
+	"sync"
+	"time"
 )
 
 type DiskQueueManager struct {
-    // buffer of metrics that will be sent to disk soon
-    diskbuf []Metric
-    tosend MetricList
+	// buffer of metrics that will be sent to disk soon
+	diskbuf []Metric
+	tosend  MetricList
 
-    // Receive from memq, send to memq
-    recvq chan *Metric
-    memq chan *Metric
+	// Receive from memq, send to memq
+	recvq chan *Metric
+	memq  chan *Metric
 
-    // How much disk space is being used
-    diskUsage int64
+	// How much disk space is being used
+	diskUsage int64
 
-    batch_size int
+	batch_size int
 
-    // metrics queued on disk
-    diskq *goque.Queue
+	// metrics queued on disk
+	diskq *goque.Queue
 
-    // done chan bool
+	// done chan bool
 
-    config *Configuration
+	config *Configuration
 }
 
-func NewDiskQueueManager(config *Configuration, recvq chan *Metric, memq chan *Metric) (*DiskQueueManager) {
-    var err error
+func NewDiskQueueManager(config *Configuration, recvq chan *Metric, memq chan *Metric) *DiskQueueManager {
+	var err error
 
-    q := &DiskQueueManager{}
+	q := &DiskQueueManager{}
 
-    q.config = config
-    q.recvq = recvq
-    q.memq = memq
-    q.batch_size = q.config.DiskBatchSize
-    q.diskbuf = make([]Metric, 0, q.batch_size)
-    q.tosend = make([]*Metric, 0, q.batch_size)
+	q.config = config
+	q.recvq = recvq
+	q.memq = memq
+	q.batch_size = q.config.DiskBatchSize
+	q.diskbuf = make([]Metric, 0, q.batch_size)
+	q.tosend = make([]*Metric, 0, q.batch_size)
 
-    q.diskq, err = goque.OpenQueue(q.config.DiskQueuePath)
-    if err != nil {
-        glog.Fatalf("Error trying to open %s: %v", q.config.DiskQueuePath, err)
-    }
+	q.diskq, err = goque.OpenQueue(q.config.DiskQueuePath)
+	if err != nil {
+		glog.Fatalf("Error trying to open %s: %v", q.config.DiskQueuePath, err)
+	}
 
-    glog.Infof("dqmgr: Found between %v and %v metrics on disk.", q.diskq.Length(), int(q.diskq.Length()) * q.batch_size)
+	glog.Infof("dqmgr: Found between %v and %v metrics on disk.", q.diskq.Length(), int(q.diskq.Length())*q.batch_size)
 
-    return(q)
+	return (q)
 }
 
 func (q *DiskQueueManager) Count() int {
-    return(int(q.diskq.Length()) * q.batch_size + len(q.diskbuf) + len(q.tosend))
+	return (int(q.diskq.Length())*q.batch_size + len(q.diskbuf) + len(q.tosend))
 }
 
 func (q *DiskQueueManager) CountMem() int {
-    return(len(q.diskbuf) + len(q.tosend))
+	return (len(q.diskbuf) + len(q.tosend))
 }
 
 func (q *DiskQueueManager) CountDisk() int {
-    return(int(q.diskq.Length()) * q.batch_size)
+	return (int(q.diskq.Length()) * q.batch_size)
 }
 
 func (q *DiskQueueManager) GetDiskUsage() int64 {
-    return(q.diskUsage)
+	return (q.diskUsage)
 }
 
 func (q *DiskQueueManager) queue_to_disk(metric *Metric, force bool) error {
-    if metric == nil {
-        glog.Warningf("dqmgr: queue_to_disk() received nil metric!")
-        err := errors.New("dqmgr: nil metric")
-        return(err)
-    }
+	if metric == nil {
+		glog.Warningf("dqmgr: queue_to_disk() received nil metric!")
+		err := errors.New("dqmgr: nil metric")
+		return (err)
+	}
 
-    q.diskbuf = append(q.diskbuf, *metric)
+	q.diskbuf = append(q.diskbuf, *metric)
 
-    if len(q.diskbuf) >= q.batch_size {
-        if err := q.flush_disk(force); err != nil {
-            return(err)
-        }
-    }
+	if len(q.diskbuf) >= q.batch_size {
+		if err := q.flush_disk(force); err != nil {
+			return (err)
+		}
+	}
 
-    return(nil)
+	return (nil)
 }
 
 func (q *DiskQueueManager) flush_disk(force bool) error {
-    if len(q.diskbuf) > 0 {
-        glog.V(3).Infof("Flushing %v metrics to disk.", len(q.diskbuf))
-        if _, err := q.diskq.EnqueueObject(q.diskbuf); err != nil {
-            glog.Errorf("Failed to queue %v metrics to disk: %v\n", len(q.diskbuf), err)
-            return(err)
-        }
+	if len(q.diskbuf) > 0 {
+		glog.V(3).Infof("Flushing %v metrics to disk.", len(q.diskbuf))
+		if _, err := q.diskq.EnqueueObject(q.diskbuf); err != nil {
+			glog.Errorf("Failed to queue %v metrics to disk: %v\n", len(q.diskbuf), err)
+			return (err)
+		}
 
-        q.diskbuf = make([]Metric, 0, q.batch_size)
+		q.diskbuf = make([]Metric, 0, q.batch_size)
 
-        glog.V(3).Infof("Number of objects on disk: %v", q.diskq.Length())
-    }
+		glog.V(3).Infof("Number of objects on disk: %v", q.diskq.Length())
+	}
 
-    return(nil)
+	return (nil)
 }
 
 func (q *DiskQueueManager) dequeue_from_disk() bool {
-    item, err := q.diskq.Dequeue()
-    if err != nil {
-        glog.Errorf("Fucked up trying to get data from disk: %v", err)
-        return false
-    }
+	item, err := q.diskq.Dequeue()
+	if err != nil {
+		glog.Errorf("Fucked up trying to get data from disk: %v", err)
+		return false
+	}
 
-    // fmt.Printf("item: %+v\n", item)
-    buf := bytes.NewBuffer(item.Value)
-    dec := gob.NewDecoder(buf)
+	// fmt.Printf("item: %+v\n", item)
+	buf := bytes.NewBuffer(item.Value)
+	dec := gob.NewDecoder(buf)
 
-    var metrics []Metric
-    err = dec.Decode(&metrics)
-    if err != nil {
-        glog.Fatalf("Error decoding metric from disk: %v", err)
-        return false
-    }
+	var metrics []Metric
+	err = dec.Decode(&metrics)
+	if err != nil {
+		glog.Fatalf("Error decoding metric from disk: %v", err)
+		return false
+	}
 
-    glog.V(5).Infof("Decoded %v metrics from disk", len(metrics))
+	glog.V(5).Infof("Decoded %v metrics from disk", len(metrics))
 
-    for _, metric := range metrics {
-        // q.add_mem(metric)
-        q.tosend = append(q.tosend, &metric)
-    }
+	for _, metric := range metrics {
+		// q.add_mem(metric)
+		q.tosend = append(q.tosend, &metric)
+	}
 
-    return true
+	return true
 }
 
 func (q *DiskQueueManager) shutdown() {
-    // Persist all queues to disk.
+	// Persist all queues to disk.
 
-    glog.Infof("dqmgr: Shutting down.")
+	glog.Infof("dqmgr: Shutting down.")
 
-    // Flush "diskbuf" (items pending to be flushed to disk)
-    // glog.Infof("dqmgr: Flushing diskbuf")
-    // q.flush_disk(true)
+	// Flush "diskbuf" (items pending to be flushed to disk)
+	// glog.Infof("dqmgr: Flushing diskbuf")
+	// q.flush_disk(true)
 
-    // Flush "tosend" (items pending to be sent back to memq)
-    glog.Infof("dqmgr: Flushing tosend")
-    for _, metric := range q.tosend {
-        q.diskbuf = append(q.diskbuf, *metric)
-    }
-    // q.flush_disk(true)
+	// Flush "tosend" (items pending to be sent back to memq)
+	glog.Infof("dqmgr: Flushing tosend")
+	for _, metric := range q.tosend {
+		q.diskbuf = append(q.diskbuf, *metric)
+	}
+	// q.flush_disk(true)
 
-    glog.Infof("dqmgr: Draining recvq")
-    for metric := range q.recvq {
-        q.queue_to_disk(metric, true)
-    }
+	glog.Infof("dqmgr: Draining recvq")
+	for metric := range q.recvq {
+		q.queue_to_disk(metric, true)
+	}
 
-    glog.Infof("dqmgr: Flushing last metrics to disk")
-    q.flush_disk(true)
+	glog.Infof("dqmgr: Flushing last metrics to disk")
+	q.flush_disk(true)
 
-    q.diskq.Close()
-    glog.Infof("dqmgr: Done.")
+	q.diskq.Close()
+	glog.Infof("dqmgr: Done.")
 
-    // q.done <- true
+	// q.done <- true
 }
 
 func (q *DiskQueueManager) diskQueueManager(ctx context.Context, wg *sync.WaitGroup) {
-    var memq chan *Metric
-    var to_send *Metric
+	var memq chan *Metric
+	var to_send *Metric
 
-    wg.Add(1)
-    defer wg.Done()
+	wg.Add(1)
+	defer wg.Done()
 
-    alive := true
-    acceptingMetrics := true
-    duChannel := make(chan int64)
+	alive := true
+	acceptingMetrics := true
+	duChannel := make(chan int64)
 
-    go updateDiskUsage(q.config.DiskQueuePath, duChannel)
+	go updateDiskUsage(q.config.DiskQueuePath, duChannel)
 
-    for alive {
-        if q.diskq.Length() > 0 || len(q.tosend) > 0 {
-            if len(q.tosend) == 0 {
-                q.dequeue_from_disk()
-            }
+	for alive {
+		if q.diskq.Length() > 0 || len(q.tosend) > 0 {
+			if len(q.tosend) == 0 {
+				q.dequeue_from_disk()
+			}
 
-            memq = q.memq
-            to_send = q.tosend[0]
-        } else {
-            memq = nil
-            to_send = nil
-        }
+			memq = q.memq
+			to_send = q.tosend[0]
+		} else {
+			memq = nil
+			to_send = nil
+		}
 
-        // glog.V(4).Infof("to_send: %v", len(q.tosend))
+		// glog.V(4).Infof("to_send: %v", len(q.tosend))
 
-        select {
-            case metric := <-q.recvq:
-                glog.V(4).Infof("dqmgr: Received metric")
-                if acceptingMetrics {
-                    q.queue_to_disk(metric, true)
-                } else {
-                    glog.Warningf("dqmgr: Dropping metric")
-                    // q.counters.inc_droppedDiskFull(1)
-                    MetricsDroppedDiskqFull.Inc()
-                }
+		select {
+		case metric := <-q.recvq:
+			glog.V(4).Infof("dqmgr: Received metric")
+			if acceptingMetrics {
+				q.queue_to_disk(metric, true)
+			} else {
+				glog.Warningf("dqmgr: Dropping metric")
+				// q.counters.inc_droppedDiskFull(1)
+				MetricsDroppedDiskqFull.Inc()
+			}
 
-            case memq <- to_send:
-                glog.V(4).Infof("dqmgr: Sent metric back to memq")
-                if len(q.tosend) > 1 {
-                    q.tosend = q.tosend[1:]
-                } else {
-                    q.tosend = make([]*Metric, 0, q.batch_size)
-                }
+		case memq <- to_send:
+			glog.V(4).Infof("dqmgr: Sent metric back to memq")
+			if len(q.tosend) > 1 {
+				q.tosend = q.tosend[1:]
+			} else {
+				q.tosend = make([]*Metric, 0, q.batch_size)
+			}
 
-            case queueDiskUsage := <-duChannel:
-                q.diskUsage = queueDiskUsage
-                glog.V(3).Infof("dqmgr: Disk usage: %v bytes", q.diskUsage)
-                if queueDiskUsage < q.config.DiskMaxSize {
-                    acceptingMetrics = true
-                } else {
-                    acceptingMetrics = false
-                }
+		case queueDiskUsage := <-duChannel:
+			q.diskUsage = queueDiskUsage
+			glog.V(3).Infof("dqmgr: Disk usage: %v bytes", q.diskUsage)
+			if queueDiskUsage < q.config.DiskMaxSize {
+				acceptingMetrics = true
+			} else {
+				acceptingMetrics = false
+			}
 
-            case <-ctx.Done():
-                glog.Infof("dqmgr: Received shutdown request.")
-                alive = false
-                break                
-        }
-    }
+		case <-ctx.Done():
+			glog.Infof("dqmgr: Received shutdown request.")
+			alive = false
+			break
+		}
+	}
 
-    q.shutdown()
+	q.shutdown()
 }
 
 func updateDiskUsage(dirPath string, c chan int64) {
-    for {
-        size := du(dirPath)
-        c <- size
+	for {
+		size := du(dirPath)
+		c <- size
 
-        // Check every 5 seconds
-        <-time.After(time.Second * 5)
-    }
+		// Check every 5 seconds
+		<-time.After(time.Second * 5)
+	}
 }
 
 // Recursively returns the number of bytes used by files in a directory.
 // The output may probably be different from the OS' own `du` because we don't
 // round to the nearest block size
 func du(dirPath string) int64 {
-    var total int64 = 0
+	var total int64 = 0
 
-    dir, err := os.Open(dirPath)
-    if err != nil {
-        glog.Errorf("Unable to open %s to count disk space: %v", dirPath, err)
-        return(-1)
-    }
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		glog.Errorf("Unable to open %s to count disk space: %v", dirPath, err)
+		return (-1)
+	}
 
-    defer dir.Close()
+	defer dir.Close()
 
-    files, err := dir.Readdir(0)
-    if err != nil {
-        glog.Errorf("Unable to open read files in %s: %v", dirPath, err)
-        return(-1)
-    }
+	files, err := dir.Readdir(0)
+	if err != nil {
+		glog.Errorf("Unable to open read files in %s: %v", dirPath, err)
+		return (-1)
+	}
 
-    for _, file := range files {
-        if file.IsDir() {
-            subPath := path.Join(dirPath, file.Name())
-            total += du(subPath)
-        } else {
-            total += file.Size()
-        }
-    }
+	for _, file := range files {
+		if file.IsDir() {
+			subPath := path.Join(dirPath, file.Name())
+			total += du(subPath)
+		} else {
+			total += file.Size()
+		}
+	}
 
-    return total
+	return total
 }
