@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-const VERSION string = "0.2.5"
+const VERSION string = "0.9.1"
 
 var configuration *Configuration
 
@@ -42,7 +42,6 @@ func updateCounters(updateFrequencyMS int64, recvq chan *Metric, retryq chan *Me
 
 		<-time.After(time.Millisecond * time.Duration(updateFrequencyMS))
 	}
-
 }
 
 func makeMetric(name string, value interface{}, t uint64) Metric {
